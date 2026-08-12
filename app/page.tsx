@@ -1053,7 +1053,7 @@ export default function Home() {
       <footer>
         <div className="footer-brand">
           <strong>SW교육원 근로시간표 편성</strong>
-          <span>VERSION 1.0</span>
+          <span>VERSION 1.0.1</span>
         </div>
         <div className="footer-info">
           <span>Designed &amp; built by <strong>Sunghyun Kim</strong></span>
