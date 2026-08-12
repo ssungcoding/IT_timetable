@@ -2,6 +2,8 @@
 
 5명 또는 6명의 수업시간을 입력하면 월~금 근로시간표와 대기시간표를 만드는 로컬 웹앱입니다.
 
+GitHub Pages: https://ssungcoding.github.io/sw_timetable/
+
 ## 실행
 
 Node.js 22 이상이 설치된 터미널에서 아래 명령을 실행합니다.
