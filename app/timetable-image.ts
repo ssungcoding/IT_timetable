@@ -151,7 +151,7 @@ export async function recognizeTimetableImage(file: File): Promise<RecognitionRe
     { red: 0, green: 0, blue: 0 },
   );
 
-  const blocked = Array.from({ length: 5 }, () => Array(12).fill(false) as boolean[]);
+  const blocked = Array.from({ length: 7 }, () => Array(12).fill(false) as boolean[]);
   let blockedSlots = 0;
   colors.forEach((color) => {
     const distance = Math.hypot(

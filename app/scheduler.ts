@@ -1,4 +1,4 @@
-export const DAYS = ["월", "화", "수", "목", "금"] as const;
+export const DAYS = ["월", "화", "수", "목", "금", "토", "일"] as const;
 export const TIMES = [
   "10:00~10:30",
   "10:30~11:00",
@@ -15,9 +15,11 @@ export const TIMES = [
 ] as const;
 
 export type BlockedGrid = boolean[][][];
+export type OperatingGrid = boolean[][];
+export type AssignmentGrid = (number | null)[][];
 
 export type ScheduleResult = {
-  assignments: number[][];
+  assignments: AssignmentGrid;
   standbyAssignments: (number | null)[][];
   hours: number[];
   standbyHours: number[];
@@ -28,7 +30,7 @@ export type ScheduleResult = {
 };
 
 type BeamState = {
-  assignment: number[];
+  assignment: (number | null)[];
   counts: number[];
   dayMasks: number[];
   score: number;
@@ -68,8 +70,9 @@ const rankSchedule = (
   state: BeamState,
   peopleCount: number,
   minimumAttendanceDays: number,
+  totalSlots: number,
 ) => {
-  const target = 60 / peopleCount;
+  const target = totalSlots / peopleCount;
   const dayCounts = state.dayMasks.map(popcount);
   const totalDays = dayCounts.reduce((sum, value) => sum + value, 0);
   const daySpread = Math.max(...dayCounts) - Math.min(...dayCounts);
@@ -96,7 +99,7 @@ const rankSchedule = (
     for (let slot = 1; slot < TIMES.length; slot += 1) {
       const current = state.assignment[day * TIMES.length + slot];
       const previous = state.assignment[day * TIMES.length + slot - 1];
-      if (current !== previous) switches += 1;
+      if (current !== null && previous !== null && current !== previous) switches += 1;
     }
   }
 
@@ -125,6 +128,12 @@ export function createEmptyBlocked(peopleCount: number): BlockedGrid {
     Array.from({ length: DAYS.length }, () =>
       Array.from({ length: TIMES.length }, () => false),
     ),
+  );
+}
+
+export function createEmptyOperatingGrid(): OperatingGrid {
+  return Array.from({ length: DAYS.length }, () =>
+    Array.from({ length: TIMES.length }, () => false),
   );
 }
 
@@ -249,23 +258,26 @@ function calculateMinCostMaxFlow(
 }
 
 function buildFairStandbyAssignments(
-  assignments: number[][],
+  assignments: AssignmentGrid,
   blocked: BlockedGrid,
+  operating: OperatingGrid,
 ) {
   const peopleCount = blocked.length;
-  const totalSlots = DAYS.length * TIMES.length;
+  const gridSlots = DAYS.length * TIMES.length;
+  const totalSlots = operating.flat().filter(Boolean).length;
   const source = 0;
   const slotStart = 1;
-  const personStart = slotStart + totalSlots;
+  const personStart = slotStart + gridSlots;
   const sink = personStart + peopleCount;
   const graph = Array.from({ length: sink + 1 }, () => [] as CostFlowEdge[]);
-  const assignmentEdges = Array.from({ length: totalSlots }, () =>
+  const assignmentEdges = Array.from({ length: gridSlots }, () =>
     Array<CostFlowEdge | null>(peopleCount).fill(null),
   );
 
-  for (let index = 0; index < totalSlots; index += 1) {
+  for (let index = 0; index < gridSlots; index += 1) {
     const day = Math.floor(index / TIMES.length);
     const slot = index % TIMES.length;
+    if (!operating[day][slot]) continue;
     addCostFlowEdge(graph, source, slotStart + index, 1, 0);
     for (let person = 0; person < peopleCount; person += 1) {
       if (person !== assignments[day][slot] && !blocked[person][day][slot]) {
@@ -317,9 +329,10 @@ function buildFairStandbyAssignments(
 }
 
 export function recalculateScheduleResult(
-  assignments: number[][],
+  assignments: AssignmentGrid,
   blocked: BlockedGrid,
   minimumAttendanceDays = 1,
+  operating: OperatingGrid = createEmptyOperatingGrid(),
 ): ScheduleResult {
   const peopleCount = blocked.length;
   const counts = Array(peopleCount).fill(0) as number[];
@@ -328,6 +341,7 @@ export function recalculateScheduleResult(
   for (let day = 0; day < DAYS.length; day += 1) {
     for (let slot = 0; slot < TIMES.length; slot += 1) {
       const person = assignments[day][slot];
+      if (person === null || !operating[day][slot]) continue;
       counts[person] += 1;
       dayMasks[person] |= 1 << day;
     }
@@ -350,7 +364,7 @@ export function recalculateScheduleResult(
   });
 
   const { standbyAssignments, standbyCounts, unfilledStandby } =
-    buildFairStandbyAssignments(assignments, blocked);
+    buildFairStandbyAssignments(assignments, blocked, operating);
 
   return {
     assignments,
@@ -478,18 +492,28 @@ export function buildScheduleCandidates(
   blocked: BlockedGrid,
   candidateCount = 20,
   minimumAttendanceDays = 1,
+  operating: OperatingGrid = createEmptyOperatingGrid(),
   preferExactHours = true,
   maxAttendanceDays?: number | null,
 ): ScheduleResult[] {
   const peopleCount = blocked.length;
-  const target = 60 / peopleCount;
-  const maxSlots = preferExactHours ? target : 12;
-  const requiredSlots = preferExactHours ? target : 8;
+  const activeSlotCount = operating.flat().filter(Boolean).length;
+  if (activeSlotCount === 0) {
+    throw new Error("근로를 운영할 시간을 먼저 색칠해 주세요.");
+  }
+  const target = activeSlotCount / peopleCount;
+  const maxSlots = preferExactHours
+    ? Math.ceil(target)
+    : Math.max(12, Math.ceil(target));
+  const requiredSlots = preferExactHours
+    ? Math.floor(target)
+    : Math.min(8, Math.floor(target));
   const attendanceCap = maxAttendanceDays ?? null;
   const uncovered: string[] = [];
 
   for (let day = 0; day < DAYS.length; day += 1) {
     for (let slot = 0; slot < TIMES.length; slot += 1) {
+      if (!operating[day][slot]) continue;
       const hasWorker = blocked.some((person) => !person[day][slot]);
       if (!hasWorker) uncovered.push(`${DAYS[day]} ${TIMES[slot]}`);
     }
@@ -502,7 +526,9 @@ export function buildScheduleCandidates(
   }
 
   blocked.forEach((personGrid, person) => {
-    const availableDays = personGrid.filter((day) => day.some((cell) => !cell)).length;
+    const availableDays = personGrid.filter((dayGrid, day) =>
+      dayGrid.some((cell, slot) => operating[day][slot] && !cell),
+    ).length;
     if (availableDays < minimumAttendanceDays) {
       throw new Error(
         `${person + 1}번 학생은 근로 가능한 요일이 ${availableDays}일뿐이라 최소 ${minimumAttendanceDays}일 출근 조건을 맞출 수 없습니다.`,
@@ -519,7 +545,8 @@ export function buildScheduleCandidates(
     const slot = index % TIMES.length;
     for (let person = 0; person < peopleCount; person += 1) {
       futureAvailability[index][person] =
-        futureAvailability[index + 1][person] + (blocked[person][day][slot] ? 0 : 1);
+        futureAvailability[index + 1][person] +
+        (operating[day][slot] && !blocked[person][day][slot] ? 1 : 0);
     }
   }
 
@@ -536,6 +563,14 @@ export function buildScheduleCandidates(
   for (let index = 0; index < DAYS.length * TIMES.length; index += 1) {
     const day = Math.floor(index / TIMES.length);
     const slot = index % TIMES.length;
+    if (!operating[day][slot]) {
+      beam = beam.map((state) => ({
+        ...state,
+        assignment: [...state.assignment, null],
+        last: -1,
+      }));
+      continue;
+    }
     const nextBySignature = new Map<string, BeamState>();
 
     for (const state of beam) {
@@ -580,6 +615,7 @@ export function buildScheduleCandidates(
           blocked,
           candidateCount,
           minimumAttendanceDays,
+          operating,
           preferExactHours,
           null,
         );
@@ -589,6 +625,7 @@ export function buildScheduleCandidates(
           blocked,
           candidateCount,
           minimumAttendanceDays,
+          operating,
           false,
           null,
         );
@@ -606,7 +643,8 @@ export function buildScheduleCandidates(
   }
 
   const constructiveStates: BeamState[] = [];
-  if (preferExactHours) {
+  const isFullOperating = operating.every((day) => day.every(Boolean));
+  if (preferExactHours && isFullOperating && Number.isInteger(target) && peopleCount <= 6) {
     const peopleOrders = permutations(Array.from({ length: peopleCount }, (_, person) => person));
     const minimumPeoplePerDay = Math.ceil(TIMES.length / target);
     if (peopleCount * minimumAttendanceDays >= DAYS.length * minimumPeoplePerDay) {
@@ -694,8 +732,8 @@ export function buildScheduleCandidates(
 
   const ranked = [...constructiveStates, ...beam]
     .sort((a, b) => compareRanks(
-      rankSchedule(a, peopleCount, minimumAttendanceDays),
-      rankSchedule(b, peopleCount, minimumAttendanceDays),
+      rankSchedule(a, peopleCount, minimumAttendanceDays, activeSlotCount),
+      rankSchedule(b, peopleCount, minimumAttendanceDays, activeSlotCount),
     ))
     .filter((state, index, states) => {
       const signature = state.assignment.join("");
@@ -710,10 +748,18 @@ export function buildScheduleCandidates(
         (_, slot) => candidate.assignment[day * TIMES.length + slot],
       ),
     );
-    return recalculateScheduleResult(assignments, blocked, minimumAttendanceDays);
+    return recalculateScheduleResult(
+      assignments,
+      blocked,
+      minimumAttendanceDays,
+      operating,
+    );
   });
 }
 
-export function buildSchedule(blocked: BlockedGrid): ScheduleResult {
-  return buildScheduleCandidates(blocked, 1, 1)[0];
+export function buildSchedule(
+  blocked: BlockedGrid,
+  operating: OperatingGrid,
+): ScheduleResult {
+  return buildScheduleCandidates(blocked, 1, 1, operating)[0];
 }

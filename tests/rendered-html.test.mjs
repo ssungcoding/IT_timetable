@@ -24,7 +24,9 @@ test("keeps the work schedule features in the client app", async () => {
   assert.match(page, /수정 완료 · 대기표 재생성/);
   assert.match(page, /엑셀로 저장/);
   assert.match(page, /nativeEvent\.isComposing/);
-  assert.match(page, /buildScheduleCandidates\(blocked, 20, minimumAttendanceDays\)/);
+  assert.match(page, /minimumAttendanceDays,\s+operating,/);
+  assert.match(page, /\[3, 4, 5, 6, 7, 8, 9, 10\]/);
+  assert.match(page, /요일별 근로 운영시간 입력표/);
   assert.match(packageJson, /"build":\s*"vite build"/);
   assert.match(viteConfig, /base:\s*"\/sw_timetable\/"/);
 });

@@ -4,16 +4,24 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import {
   buildScheduleCandidates,
   createEmptyBlocked,
+  createEmptyOperatingGrid,
   DAYS,
   recalculateScheduleResult,
   TIMES,
   type BlockedGrid,
+  type OperatingGrid,
   type ScheduleResult,
 } from "./scheduler";
 import { recognizeTimetableImage } from "./timetable-image";
 
-const COLORS = ["#F4C95D", "#9BCB68", "#77B7D7", "#E59A74", "#B09AD9", "#65C3B2"];
-const DARK_COLORS = ["#6C4C00", "#345614", "#174F6A", "#74391E", "#4E3574", "#14574D"];
+const COLORS = [
+  "#F4C95D", "#9BCB68", "#77B7D7", "#E59A74", "#B09AD9",
+  "#65C3B2", "#F0A7B5", "#A8B9E8", "#D0A56B", "#85C6A1",
+];
+const DARK_COLORS = [
+  "#6C4C00", "#345614", "#174F6A", "#74391E", "#4E3574",
+  "#14574D", "#762D40", "#334B83", "#684313", "#24583A",
+];
 
 const makeNames = (count: number, previous: string[] = []) =>
   Array.from({ length: count }, (_, index) => previous[index] ?? `학생 ${index + 1}`);
@@ -27,10 +35,11 @@ async function downloadWorkbook(
   result: ScheduleResult,
   candidateNumber: number,
   minimumAttendanceDays: number,
+  operating: OperatingGrid,
 ) {
   const XLSX = await import("xlsx-js-style");
   const titleRows: (string | number)[][] = [
-    ["근로 시간표", "", "", "", "", ""],
+    ["근로 시간표", ...DAYS.map(() => "")],
     ["시간", ...DAYS],
   ];
   const scheduleRows: (string | number)[][] = [];
@@ -39,7 +48,11 @@ async function downloadWorkbook(
     if (slot === 4) scheduleRows.push(["12:00~13:00", "점심시간", "", "", "", ""]);
     scheduleRows.push([
       time,
-      ...DAYS.map((_, day) => names[result.assignments[day][slot]]),
+      ...DAYS.map((_, day) => {
+        if (!operating[day][slot]) return "운영 없음";
+        const person = result.assignments[day][slot];
+        return person === null ? "" : names[person];
+      }),
     ]);
   });
 
@@ -51,8 +64,8 @@ async function downloadWorkbook(
     "!freeze"?: { xSplit: number; ySplit: number };
   };
   ws["!merges"] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: 5 } },
-    { s: { r: 6, c: 1 }, e: { r: 6, c: 5 } },
+    { s: { r: 0, c: 0 }, e: { r: 0, c: DAYS.length } },
+    { s: { r: 6, c: 1 }, e: { r: 6, c: DAYS.length } },
   ];
   ws["!cols"] = [{ wch: 18 }, ...DAYS.map(() => ({ wch: 16 }))];
   ws["!rows"] = [{ hpt: 32 }, { hpt: 26 }];
@@ -66,7 +79,7 @@ async function downloadWorkbook(
   };
 
   for (let row = 0; row <= 14; row += 1) {
-    for (let col = 0; col <= 5; col += 1) {
+    for (let col = 0; col <= DAYS.length; col += 1) {
       const address = XLSX.utils.encode_cell({ r: row, c: col });
       const cell = excelCell(ws, address);
       if (!cell) continue;
@@ -82,7 +95,7 @@ async function downloadWorkbook(
     font: { name: "맑은 고딕", sz: 18, bold: true, color: { rgb: "FFFFFF" } },
     fill: { fgColor: { rgb: "173F35" } },
   });
-  for (let col = 0; col <= 5; col += 1) {
+  for (let col = 0; col <= DAYS.length; col += 1) {
     const cell = excelCell(ws, XLSX.utils.encode_cell({ r: 1, c: col }));
     if (cell) cell.s = {
       font: { name: "맑은 고딕", sz: 11, bold: true, color: { rgb: "FFFFFF" } },
@@ -100,7 +113,7 @@ async function downloadWorkbook(
       alignment: { horizontal: "center", vertical: "center" },
       border,
     };
-    for (let col = 1; col <= 5; col += 1) {
+    for (let col = 1; col <= DAYS.length; col += 1) {
       const cell = excelCell(ws, XLSX.utils.encode_cell({ r: row, c: col }));
       if (!cell) continue;
       if (row === 6) {
@@ -112,6 +125,15 @@ async function downloadWorkbook(
         };
       } else {
         const person = names.indexOf(String(cell.v));
+        if (person === -1) {
+          cell.s = {
+            font: { name: "맑은 고딕", sz: 10, color: { rgb: "7A847E" } },
+            fill: { fgColor: { rgb: "EEF0EC" } },
+            alignment: { horizontal: "center", vertical: "center" },
+            border,
+          };
+          continue;
+        }
         cell.s = {
           font: { name: "맑은 고딕", sz: 11, bold: true, color: { rgb: DARK_COLORS[person].slice(1) } },
           fill: { fgColor: { rgb: COLORS[person].slice(1) } },
@@ -131,6 +153,16 @@ async function downloadWorkbook(
     DAYS.forEach((__, day) => {
       const cell = excelCell(standby, XLSX.utils.encode_cell({ r: row, c: day + 1 }));
       if (!cell) return;
+      if (!operating[day][slot]) {
+        cell.v = "운영 없음";
+        cell.s = {
+          font: { name: "맑은 고딕", sz: 10, color: { rgb: "7A847E" } },
+          fill: { fgColor: { rgb: "EEF0EC" } },
+          alignment: { horizontal: "center", vertical: "center" },
+          border,
+        };
+        return;
+      }
       const person = result.standbyAssignments[day][slot];
       cell.v = person === null ? "" : names[person];
       cell.s = person === null ? {
@@ -200,10 +232,12 @@ async function downloadWorkbook(
 function ScheduleTable({
   assignments,
   names,
+  operating,
   emptyLabel = "—",
 }: {
   assignments: (number | null)[][];
   names: string[];
+  operating: OperatingGrid;
   emptyLabel?: string;
 }) {
   return (
@@ -217,13 +251,16 @@ function ScheduleTable({
             <Fragment key={time}>
               {slot === 4 && (
                 <tr className="lunch-result">
-                  <th>12:00~13:00</th><td colSpan={5}>점심시간 · 근로 없음</td>
+                  <th>12:00~13:00</th><td colSpan={DAYS.length}>점심시간 · 근로 없음</td>
                 </tr>
               )}
               <tr>
                 <th>{time}</th>
                 {DAYS.map((day, dayIndex) => {
                   const person = assignments[dayIndex][slot];
+                  if (!operating[dayIndex][slot]) {
+                    return <td className="closed-assignment" key={day}>운영 안 함</td>;
+                  }
                   return person === null ? (
                     <td className="empty-assignment" key={day}>{emptyLabel}</td>
                   ) : (
@@ -245,12 +282,14 @@ function EditableScheduleTable({
   assignments,
   drafts,
   names,
+  operating,
   onDraftChange,
   onCommit,
 }: {
-  assignments: number[][];
+  assignments: (number | null)[][];
   drafts: string[][];
   names: string[];
+  operating: OperatingGrid;
   onDraftChange: (day: number, slot: number, value: string) => void;
   onCommit: (day: number, slot: number, value: string) => void;
 }) {
@@ -265,13 +304,16 @@ function EditableScheduleTable({
             <Fragment key={time}>
               {slot === 4 && (
                 <tr className="lunch-result">
-                  <th>12:00~13:00</th><td colSpan={5}>점심시간 · 근로 없음</td>
+                  <th>12:00~13:00</th><td colSpan={DAYS.length}>점심시간 · 근로 없음</td>
                 </tr>
               )}
               <tr>
                 <th>{time}</th>
                 {DAYS.map((day, dayIndex) => {
                   const person = assignments[dayIndex][slot];
+                  if (person === null || !operating[dayIndex][slot]) {
+                    return <td className="closed-assignment" key={day}>운영 안 함</td>;
+                  }
                   return (
                     <td key={day} style={{ background: COLORS[person] }}>
                       <input
@@ -308,6 +350,8 @@ export default function Home() {
   const [minimumAttendanceDays, setMinimumAttendanceDays] = useState(1);
   const [names, setNames] = useState(() => makeNames(5));
   const [blocked, setBlocked] = useState<BlockedGrid>(() => createEmptyBlocked(5));
+  const [operating, setOperating] = useState<OperatingGrid>(() => createEmptyOperatingGrid());
+  const [operatingPaint, setOperatingPaint] = useState<boolean | null>(null);
   const [paintValue, setPaintValue] = useState<{ person: number; value: boolean } | null>(null);
   const [results, setResults] = useState<ScheduleResult[]>([]);
   const [selectedCandidate, setSelectedCandidate] = useState(0);
@@ -321,7 +365,10 @@ export default function Home() {
   const resultRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    const stopPainting = () => setPaintValue(null);
+    const stopPainting = () => {
+      setPaintValue(null);
+      setOperatingPaint(null);
+    };
     window.addEventListener("pointerup", stopPainting);
     window.addEventListener("pointercancel", stopPainting);
     return () => {
@@ -372,6 +419,16 @@ export default function Home() {
     clearGeneratedResults();
   };
 
+  const setOperatingCell = (day: number, slot: number, value: boolean) => {
+    setOperating((current) => current.map((dayGrid, dayIndex) =>
+      dayIndex === day
+        ? dayGrid.map((cell, slotIndex) => slotIndex === slot ? value : cell)
+        : dayGrid,
+    ));
+    clearGeneratedResults();
+    setError("");
+  };
+
   const generate = () => {
     const cleanNames = names.map((name, index) => name.trim() || `학생 ${index + 1}`);
     setNames(cleanNames);
@@ -380,7 +437,12 @@ export default function Home() {
     setEditDrafts(null);
     setIsFinalEditing(false);
     try {
-      const nextResults = buildScheduleCandidates(blocked, 20, minimumAttendanceDays);
+      const nextResults = buildScheduleCandidates(
+        blocked,
+        20,
+        minimumAttendanceDays,
+        operating,
+      );
       setResults(nextResults);
       setSelectedCandidate(0);
       requestAnimationFrame(() =>
@@ -432,8 +494,8 @@ export default function Home() {
 
   const recognizeImageBatch = async (files: File[]) => {
     const imageFiles = files.filter((file) => file.type.startsWith("image/"));
-    if (imageFiles.length !== 5 && imageFiles.length !== 6) {
-      setBatchStatus("시간표 사진 5장 또는 6장을 한꺼번에 넣어주세요.");
+    if (imageFiles.length < 3 || imageFiles.length > 10) {
+      setBatchStatus("시간표 사진을 3장부터 10장까지 한꺼번에 넣어주세요.");
       return;
     }
 
@@ -455,7 +517,7 @@ export default function Home() {
     setEditedResult(copiedResult);
     setIsFinalEditing(true);
     setEditDrafts(copiedResult.assignments.map((day) =>
-      day.map((person) => names[person]),
+      day.map((person) => person === null ? "" : names[person]),
     ));
   };
 
@@ -466,6 +528,7 @@ export default function Home() {
       (name) => name.trim().normalize("NFC") === enteredName,
     );
     const currentPerson = editedResult.assignments[day][slot];
+    if (currentPerson === null || !operating[day][slot]) return;
     const resetDraft = () => setEditDrafts((current) => current?.map((dayDrafts, dayIndex) =>
       dayIndex !== day
         ? dayDrafts
@@ -496,10 +559,11 @@ export default function Home() {
       assignments,
       blocked,
       minimumAttendanceDays,
+      operating,
     );
     setEditedResult(nextResult);
     setEditDrafts(assignments.map((dayAssignments) =>
-      dayAssignments.map((assignedPerson) => names[assignedPerson]),
+      dayAssignments.map((assignedPerson) => assignedPerson === null ? "" : names[assignedPerson]),
     ));
   };
 
@@ -509,6 +573,7 @@ export default function Home() {
       editedResult.assignments,
       blocked,
       minimumAttendanceDays,
+      operating,
     ));
     setEditDrafts(null);
     setIsFinalEditing(false);
@@ -524,7 +589,7 @@ export default function Home() {
           <span className="brand-mark" aria-hidden="true">W</span>
           <span>근로시간표 만들기</span>
         </a>
-        <span className="topbar-note">월–금 · 30분 단위 · 1명 근무</span>
+        <span className="topbar-note">월–일 · 30분 단위 · 1명 근무</span>
       </header>
 
       <section className="hero" id="top">
@@ -544,6 +609,103 @@ export default function Home() {
         <div className="section-heading">
           <span className="step-number">01</span>
           <div>
+            <h2>근로 운영시간을 색칠하세요</h2>
+            <p>색칠한 요일과 시간에만 근로 및 대기 인원을 편성합니다.</p>
+          </div>
+        </div>
+
+        <article className="availability-card operating-card">
+          <div className="grid-toolbar">
+            <div className="student-card-title">
+              <span className="operating-mark" aria-hidden="true">W</span>
+              <div>
+                <strong>요일별 운영시간</strong>
+                <small>{operating.flat().filter(Boolean).length * 0.5}시간 선택</small>
+              </div>
+            </div>
+            <div className="card-actions">
+              <button
+                type="button"
+                className="clear-button"
+                onClick={() => {
+                  setOperating(DAYS.map(() => TIMES.map(() => true)));
+                  clearGeneratedResults();
+                  setError("");
+                }}
+              >
+                전체 선택
+              </button>
+              <button
+                type="button"
+                className="clear-button"
+                onClick={() => {
+                  setOperating(DAYS.map(() => TIMES.map(() => false)));
+                  clearGeneratedResults();
+                  setError("");
+                }}
+              >
+                전체 지우기
+              </button>
+            </div>
+          </div>
+          <div className="table-scroll">
+            <div className="availability-grid operating-grid" role="grid" aria-label="요일별 근로 운영시간 입력표">
+              <div className="grid-corner">시간</div>
+              {DAYS.map((day) => <div className="day-header" key={day}>{day}요일</div>)}
+              {TIMES.map((time, slot) => (
+                <div className="grid-row" key={time}>
+                  {slot === 4 && (
+                    <>
+                      <div className="lunch-time">12:00~13:00</div>
+                      <div className="lunch-row"><span aria-hidden="true">☕</span> 점심시간 · 근로 없음</div>
+                    </>
+                  )}
+                  <div className="time-label">{time}</div>
+                  {DAYS.map((day, dayIndex) => {
+                    const isOperating = operating[dayIndex][slot];
+                    return (
+                      <button
+                        key={day}
+                        type="button"
+                        aria-label={`${day}요일 ${time} ${isOperating ? "근로 운영" : "운영 안 함"}`}
+                        aria-pressed={isOperating}
+                        className={`availability-cell operating-cell ${isOperating ? "selected" : ""}`}
+                        onPointerDown={(event) => {
+                          event.preventDefault();
+                          const value = !isOperating;
+                          setOperatingPaint(value);
+                          setOperatingCell(dayIndex, slot, value);
+                        }}
+                        onPointerEnter={() => {
+                          if (operatingPaint !== null && operatingPaint !== isOperating) {
+                            setOperatingCell(dayIndex, slot, operatingPaint);
+                          }
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            setOperatingCell(dayIndex, slot, !isOperating);
+                          }
+                        }}
+                      >
+                        {isOperating && <span>운영</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="legend operating-legend">
+            <span><i className="legend-operating" /> 근로 편성</span>
+            <span><i className="legend-closed" /> 운영 안 함</span>
+            <span className="legend-tip">필요한 요일과 시간만 직접 색칠하세요.</span>
+          </div>
+        </article>
+
+        <div className="section-heading">
+          <span className="step-number">02</span>
+          <div>
             <h2>학생 정보를 입력하세요</h2>
             <p>근로 인원을 고르고 이름을 확인해 주세요.</p>
           </div>
@@ -553,8 +715,8 @@ export default function Home() {
           <div className="setup-options">
             <div className="count-control">
               <span className="field-label">근로 인원</span>
-              <div className="segment-control" role="group" aria-label="근로 인원 선택">
-                {[5, 6].map((count) => (
+              <div className="segment-control count-range" role="group" aria-label="근로 인원 선택">
+                {[3, 4, 5, 6, 7, 8, 9, 10].map((count) => (
                   <button
                     key={count}
                     className={peopleCount === count ? "active" : ""}
@@ -569,7 +731,7 @@ export default function Home() {
             <div className="count-control">
               <span className="field-label">학생별 최소 출근 요일</span>
               <div className="segment-control day-control" role="group" aria-label="학생별 최소 출근 요일 선택">
-                {[1, 2, 3, 4, 5].map((days) => (
+                {[1, 2, 3, 4, 5, 6, 7].map((days) => (
                   <button
                     key={days}
                     className={minimumAttendanceDays === days ? "active" : ""}
@@ -607,10 +769,10 @@ export default function Home() {
         </div>
 
         <div className="section-heading schedule-heading">
-          <span className="step-number">02</span>
+          <span className="step-number">03</span>
           <div>
             <h2>수업시간을 색칠하세요</h2>
-            <p>사진 5~6장을 한꺼번에 넣어 자동 인식하거나, 필요한 칸을 직접 수정하세요.</p>
+            <p>사진 3~10장을 한꺼번에 넣어 자동 인식하거나, 필요한 칸을 직접 수정하세요.</p>
           </div>
         </div>
 
@@ -645,7 +807,7 @@ export default function Home() {
             type="file"
             accept="image/jpeg,image/png,image/webp"
             multiple
-            aria-label="학생 시간표 사진 5장 또는 6장 일괄 인식"
+            aria-label="학생 시간표 사진 3장부터 10장 일괄 인식"
             onChange={async (event) => {
               await recognizeImageBatch(Array.from(event.target.files ?? []));
               event.target.value = "";
@@ -654,7 +816,7 @@ export default function Home() {
           <span className="batch-drop-icon" aria-hidden="true">⇩</span>
           <span className="batch-drop-copy">
             <strong>{batchDragging ? "사진을 여기에 놓으세요" : "학생 시간표 사진을 한꺼번에 끌어다 놓으세요"}</strong>
-            <small>5장 또는 6장 · 사진 수에 맞춰 인원과 파일명을 자동 입력합니다.</small>
+            <small>3~10장 · 사진 수에 맞춰 인원과 파일명을 자동 입력합니다.</small>
           </span>
           <span className="batch-select-button">여러 장 선택</span>
         </label>
@@ -772,7 +934,7 @@ export default function Home() {
         <div className="results-inner">
           <div className="results-heading">
             <div className="section-heading">
-              <span className="step-number light">03</span>
+              <span className="step-number light">04</span>
               <div>
                 <h2>추천 시간표 {results.length}개</h2>
                 <p>근로시간 형평성, 출근 요일 형평성 순으로 정렬했습니다.</p>
@@ -784,7 +946,13 @@ export default function Home() {
                 type="button"
                 disabled={isFinalEditing}
                 title={isFinalEditing ? "수정 완료 후 저장할 수 있습니다." : undefined}
-                onClick={() => downloadWorkbook(names, result, selectedCandidate + 1, minimumAttendanceDays)}
+                onClick={() => downloadWorkbook(
+                  names,
+                  result,
+                  selectedCandidate + 1,
+                  minimumAttendanceDays,
+                  operating,
+                )}
               >
                 <span aria-hidden="true">↓</span> 엑셀로 저장
               </button>
@@ -871,6 +1039,7 @@ export default function Home() {
                     assignments={editedResult.assignments}
                     drafts={editDrafts}
                     names={names}
+                    operating={operating}
                     onDraftChange={(day, slot, value) => setEditDrafts((current) =>
                       current?.map((dayDrafts, dayIndex) =>
                         dayIndex !== day
@@ -881,7 +1050,7 @@ export default function Home() {
                     onCommit={commitManualAssignment}
                   />
                 ) : (
-                  <ScheduleTable assignments={result.assignments} names={names} />
+                  <ScheduleTable assignments={result.assignments} names={names} operating={operating} />
                 )}
               </div>
 
@@ -897,7 +1066,12 @@ export default function Home() {
                     <p>`수정 완료 · 대기표 재생성`을 누르면 변경된 근로자를 제외하고 대기시간을 공정하게 다시 계산합니다.</p>
                   </div>
                 ) : (
-                  <ScheduleTable assignments={result.standbyAssignments} names={names} emptyLabel="빈칸" />
+                  <ScheduleTable
+                    assignments={result.standbyAssignments}
+                    names={names}
+                    operating={operating}
+                    emptyLabel="빈칸"
+                  />
                 )}
               </div>
 
