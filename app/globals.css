@@ -91,6 +91,8 @@ button { color: inherit; }
   line-height: 1.12;
   letter-spacing: -0.055em;
   font-weight: 850;
+  word-break: keep-all;
+  text-wrap: balance;
 }
 
 .hero-copy {

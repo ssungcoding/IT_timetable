@@ -530,7 +530,7 @@ export default function Home() {
       <section className="hero" id="top">
         <div>
           <p className="eyebrow">WORK SCHEDULE BUILDER</p>
-          <h1>SW교육원 근로시간표 제조기</h1>
+          <h1>SW교육원 근로시간표 편성</h1>
           <p className="hero-copy">
             출근 요일은 최대한 줄이고, 주간 근로시간은 4~6시간 안에서
             고르게 배정합니다.
