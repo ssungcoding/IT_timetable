@@ -589,7 +589,7 @@ export default function Home() {
           <span className="brand-mark" aria-hidden="true">W</span>
           <span>근로시간표 만들기</span>
         </a>
-        <span className="topbar-note">월–일 · 30분 단위 · 1명 근무</span>
+        <span className="topbar-note">월–일 · 30분 단위</span>
       </header>
 
       <section className="hero" id="top">
@@ -1096,8 +1096,16 @@ export default function Home() {
       </section>
 
       <footer>
-        <span>근로시간표 만들기</span>
-        <span>모든 데이터는 현재 브라우저에서만 처리됩니다.</span>
+        <div className="footer-brand">
+          <strong>SW교육원 근로시간표 편성</strong>
+          <span>VERSION 1.0</span>
+        </div>
+        <div className="footer-info">
+          <span>Designed &amp; built by <strong>Sunghyun Kim</strong></span>
+          <a href="mailto:atwoddl@naver.com">atwoddl@naver.com</a>
+          <span>Created · 2026.08.12</span>
+          <span>© 2026 Sunghyun Kim. All rights reserved.</span>
+        </div>
       </footer>
     </main>
   );

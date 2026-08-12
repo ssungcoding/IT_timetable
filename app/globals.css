@@ -786,8 +786,8 @@ button { color: inherit; }
 .summary-metrics strong { font-family: Georgia, serif; font-size: 20px; }
 
 footer {
-  min-height: 86px;
-  padding: 0 max(24px, calc((100vw - 1180px) / 2));
+  min-height: 116px;
+  padding: 24px max(24px, calc((100vw - 1180px) / 2));
   background: var(--green-dark);
   color: #b7cbc3;
   display: flex;
@@ -797,7 +797,13 @@ footer {
   font-size: 12px;
 }
 
-footer span:first-child { color: white; font-weight: 800; }
+.footer-brand { display: flex; flex-direction: column; gap: 8px; }
+.footer-brand strong { color: white; font-size: 15px; }
+.footer-brand span { color: #d6a96d; font-size: 9px; font-weight: 900; letter-spacing: 0.16em; }
+.footer-info { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px 18px; max-width: 680px; }
+.footer-info strong { color: white; }
+.footer-info a { color: #d6c19e; text-decoration: none; }
+.footer-info a:hover { color: white; text-decoration: underline; text-underline-offset: 3px; }
 
 @media (max-width: 850px) {
   .hero { grid-template-columns: 1fr; gap: 36px; padding-top: 52px; }
@@ -837,6 +843,8 @@ footer span:first-child { color: white; font-weight: 800; }
   .recognition-status { margin-left: 0; }
   .batch-drop-zone { align-items: flex-start; flex-wrap: wrap; }
   .batch-drop-copy { width: calc(100% - 58px); }
+  footer { align-items: flex-start; flex-direction: column; }
+  .footer-info { justify-content: flex-start; flex-direction: column; gap: 6px; }
   .batch-select-button { margin-left: 58px; }
   .editing-badge { display: none; }
   .legend-tip { display: none !important; }
