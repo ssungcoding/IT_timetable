@@ -15,11 +15,11 @@ import {
 import { recognizeTimetableImage } from "./timetable-image";
 
 const COLORS = [
-  "#F4C95D", "#9BCB68", "#77B7D7", "#E59A74", "#B09AD9",
+  "#F4C95D", "#9BCB68", "#77B7D7", "#E88AA8", "#B09AD9",
   "#65C3B2", "#F0A7B5", "#A8B9E8", "#D0A56B", "#85C6A1",
 ];
 const DARK_COLORS = [
-  "#6C4C00", "#345614", "#174F6A", "#74391E", "#4E3574",
+  "#6C4C00", "#345614", "#174F6A", "#6D2341", "#4E3574",
   "#14574D", "#762D40", "#334B83", "#684313", "#24583A",
 ];
 
