@@ -280,18 +280,18 @@ function ScheduleTable({
 
 function EditableScheduleTable({
   assignments,
-  drafts,
   names,
   operating,
-  onDraftChange,
-  onCommit,
+  blocked,
+  hours,
+  onSelect,
 }: {
   assignments: (number | null)[][];
-  drafts: string[][];
   names: string[];
   operating: OperatingGrid;
-  onDraftChange: (day: number, slot: number, value: string) => void;
-  onCommit: (day: number, slot: number, value: string) => void;
+  blocked: BlockedGrid;
+  hours: number[];
+  onSelect: (day: number, slot: number, person: number) => void;
 }) {
   return (
     <div className="result-table-wrap editing-table-wrap">
@@ -316,20 +316,21 @@ function EditableScheduleTable({
                   }
                   return (
                     <td key={day} style={{ background: COLORS[person] }}>
-                      <input
+                      <select
                         aria-label={`${day}요일 ${time} 근로 학생 수정`}
-                        value={drafts[dayIndex][slot]}
-                        onChange={(event) => onDraftChange(dayIndex, slot, event.target.value)}
-                        onCompositionEnd={(event) =>
-                          onDraftChange(dayIndex, slot, event.currentTarget.value)
+                        value={person}
+                        onChange={(event) =>
+                          onSelect(dayIndex, slot, Number(event.currentTarget.value))
                         }
-                        onBlur={(event) => onCommit(dayIndex, slot, event.currentTarget.value)}
-                        onKeyDown={(event) => {
-                          if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
-                          if (event.key === "Enter") event.currentTarget.blur();
-                        }}
-                        list="registered-student-names"
-                      />
+                      >
+                        {names.map((name, availablePerson) =>
+                          blocked[availablePerson][dayIndex][slot] ? null : (
+                            <option value={availablePerson} key={availablePerson}>
+                              {name} · {hours[availablePerson]}시간
+                            </option>
+                          ),
+                        )}
+                      </select>
                     </td>
                   );
                 })}
@@ -338,9 +339,6 @@ function EditableScheduleTable({
           ))}
         </tbody>
       </table>
-      <datalist id="registered-student-names">
-        {names.map((name) => <option value={name} key={name} />)}
-      </datalist>
     </div>
   );
 }
@@ -356,7 +354,6 @@ export default function Home() {
   const [results, setResults] = useState<ScheduleResult[]>([]);
   const [selectedCandidate, setSelectedCandidate] = useState(0);
   const [editedResult, setEditedResult] = useState<ScheduleResult | null>(null);
-  const [editDrafts, setEditDrafts] = useState<string[][] | null>(null);
   const [isFinalEditing, setIsFinalEditing] = useState(false);
   const [recognitionStatus, setRecognitionStatus] = useState(() => Array(5).fill(""));
   const [batchDragging, setBatchDragging] = useState(false);
@@ -380,7 +377,6 @@ export default function Home() {
   const clearGeneratedResults = () => {
     setResults([]);
     setEditedResult(null);
-    setEditDrafts(null);
     setIsFinalEditing(false);
   };
 
@@ -434,7 +430,6 @@ export default function Home() {
     setNames(cleanNames);
     setError("");
     setEditedResult(null);
-    setEditDrafts(null);
     setIsFinalEditing(false);
     try {
       const nextResults = buildScheduleCandidates(
@@ -513,43 +508,14 @@ export default function Home() {
   };
 
   const beginFinalEditing = (candidate: ScheduleResult) => {
-    const copiedResult = structuredClone(candidate);
-    setEditedResult(copiedResult);
+    setEditedResult(structuredClone(candidate));
     setIsFinalEditing(true);
-    setEditDrafts(copiedResult.assignments.map((day) =>
-      day.map((person) => person === null ? "" : names[person]),
-    ));
   };
 
-  const commitManualAssignment = (day: number, slot: number, inputValue: string) => {
-    if (!editedResult || !editDrafts) return;
-    const enteredName = inputValue.trim().normalize("NFC");
-    const person = names.findIndex(
-      (name) => name.trim().normalize("NFC") === enteredName,
-    );
-    const currentPerson = editedResult.assignments[day][slot];
-    if (currentPerson === null || !operating[day][slot]) return;
-    const resetDraft = () => setEditDrafts((current) => current?.map((dayDrafts, dayIndex) =>
-      dayIndex !== day
-        ? dayDrafts
-        : dayDrafts.map((value, slotIndex) =>
-            slotIndex === slot ? names[currentPerson] : value,
-          ),
-    ) ?? null);
-
-    if (!enteredName) {
-      window.alert("학생 이름을 입력해 주세요.");
-      resetDraft();
-      return;
-    }
-    if (person === -1) {
-      window.alert(`등록된 학생 중 '${enteredName}' 학생은 없습니다.`);
-      resetDraft();
-      return;
-    }
+  const selectManualAssignment = (day: number, slot: number, person: number) => {
+    if (!editedResult || !operating[day][slot]) return;
     if (blocked[person][day][slot]) {
       window.alert(`${names[person]} 학생은 ${DAYS[day]}요일 ${TIMES[slot]}에 수업 또는 일정이 있어 배정할 수 없습니다.`);
-      resetDraft();
       return;
     }
 
@@ -562,9 +528,6 @@ export default function Home() {
       operating,
     );
     setEditedResult(nextResult);
-    setEditDrafts(assignments.map((dayAssignments) =>
-      dayAssignments.map((assignedPerson) => assignedPerson === null ? "" : names[assignedPerson]),
-    ));
   };
 
   const finishFinalEditing = () => {
@@ -575,7 +538,6 @@ export default function Home() {
       minimumAttendanceDays,
       operating,
     ));
-    setEditDrafts(null);
     setIsFinalEditing(false);
   };
 
@@ -976,7 +938,6 @@ export default function Home() {
                     onClick={() => {
                       setSelectedCandidate(index);
                       setEditedResult(null);
-                      setEditDrafts(null);
                       setIsFinalEditing(false);
                     }}
                   >
@@ -1032,22 +993,16 @@ export default function Home() {
               <div className="schedule-block">
                 <div className="schedule-block-heading">
                   <div><span>MAIN</span><h3>근로시간표</h3></div>
-                  <p>{isFinalEditing ? "학생 이름을 입력한 뒤 Enter를 누르거나 다른 칸을 클릭하세요." : "각 시간대에 근로 학생 1명을 배정합니다."}</p>
+                  <p>{isFinalEditing ? "역삼각형을 눌러 가능한 학생과 현재 근로시간을 확인하세요." : "각 시간대에 근로 학생 1명을 배정합니다."}</p>
                 </div>
-                {isFinalEditing && editedResult && editDrafts ? (
+                {isFinalEditing && editedResult ? (
                   <EditableScheduleTable
                     assignments={editedResult.assignments}
-                    drafts={editDrafts}
                     names={names}
                     operating={operating}
-                    onDraftChange={(day, slot, value) => setEditDrafts((current) =>
-                      current?.map((dayDrafts, dayIndex) =>
-                        dayIndex !== day
-                          ? dayDrafts
-                          : dayDrafts.map((draft, slotIndex) => slotIndex === slot ? value : draft),
-                      ) ?? null
-                    )}
-                    onCommit={commitManualAssignment}
+                    blocked={blocked}
+                    hours={editedResult.hours}
+                    onSelect={selectManualAssignment}
                   />
                 ) : (
                   <ScheduleTable assignments={result.assignments} names={names} operating={operating} />
