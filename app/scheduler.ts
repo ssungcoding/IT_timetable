@@ -1,9 +1,17 @@
 export const DAYS = ["월", "화", "수", "목", "금", "토", "일"] as const;
 export const TIMES = [
+  "07:00~07:30",
+  "07:30~08:00",
+  "08:00~08:30",
+  "08:30~09:00",
+  "09:00~09:30",
+  "09:30~10:00",
   "10:00~10:30",
   "10:30~11:00",
   "11:00~11:30",
   "11:30~12:00",
+  "12:00~12:30",
+  "12:30~13:00",
   "13:00~13:30",
   "13:30~14:00",
   "14:00~14:30",
@@ -12,6 +20,16 @@ export const TIMES = [
   "15:30~16:00",
   "16:00~16:30",
   "16:30~17:00",
+  "17:00~17:30",
+  "17:30~18:00",
+  "18:00~18:30",
+  "18:30~19:00",
+  "19:00~19:30",
+  "19:30~20:00",
+  "20:00~20:30",
+  "20:30~21:00",
+  "21:00~21:30",
+  "21:30~22:00",
 ] as const;
 
 export type BlockedGrid = boolean[][][];
@@ -310,7 +328,7 @@ function buildFairStandbyAssignments(
     Array<number | null>(TIMES.length).fill(null),
   );
 
-  for (let index = 0; index < totalSlots; index += 1) {
+  for (let index = 0; index < gridSlots; index += 1) {
     const standby = assignmentEdges[index].findIndex(
       (edge) => edge !== null && edge.initial - edge.capacity === 1,
     );
@@ -375,6 +393,44 @@ export function recalculateScheduleResult(
     workDays,
     unfilledStandby,
     warnings,
+  };
+}
+
+export function updateStandbyAssignment(
+  result: ScheduleResult,
+  blocked: BlockedGrid,
+  operating: OperatingGrid,
+  day: number,
+  slot: number,
+  person: number,
+): ScheduleResult {
+  if (!operating[day]?.[slot]) {
+    throw new Error("운영하지 않는 시간에는 대기 근로자를 배정할 수 없습니다.");
+  }
+  if (result.assignments[day][slot] === person || blocked[person]?.[day]?.[slot]) {
+    throw new Error("해당 학생은 이 시간의 대기 근로자로 배정할 수 없습니다.");
+  }
+
+  const standbyAssignments = result.standbyAssignments.map((dayAssignments) =>
+    [...dayAssignments]
+  );
+  standbyAssignments[day][slot] = person;
+  const standbyCounts = Array(blocked.length).fill(0) as number[];
+  let unfilledStandby = 0;
+  for (let dayIndex = 0; dayIndex < DAYS.length; dayIndex += 1) {
+    for (let slotIndex = 0; slotIndex < TIMES.length; slotIndex += 1) {
+      if (!operating[dayIndex][slotIndex]) continue;
+      const standbyPerson = standbyAssignments[dayIndex][slotIndex];
+      if (standbyPerson === null) unfilledStandby += 1;
+      else standbyCounts[standbyPerson] += 1;
+    }
+  }
+
+  return {
+    ...result,
+    standbyAssignments,
+    standbyHours: standbyCounts.map((count) => count / 2),
+    unfilledStandby,
   };
 }
 

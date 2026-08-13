@@ -496,7 +496,7 @@ button { color: inherit; }
   font-weight: 800;
 }
 
-.time-label, .lunch-time {
+.time-label {
   min-height: 38px;
   display: grid;
   place-items: center;
@@ -530,22 +530,6 @@ button { color: inherit; }
 .operating-legend { padding-top: 10px; }
 .legend-operating { background: var(--green); border-color: var(--green) !important; }
 .legend-closed { background: white; }
-
-.lunch-time { background: #e5e9e4; color: #6b716c; }
-.lunch-row {
-  grid-column: 2 / 9;
-  min-height: 38px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  background: #e5e9e4;
-  color: #6b716c;
-  border-right: 1px solid #d4d9d3;
-  border-bottom: 1px solid #d4d9d3;
-  font-size: 12px;
-  font-weight: 700;
-}
 
 .legend {
   min-height: 42px;
@@ -711,6 +695,17 @@ button { color: inherit; }
 .schedule-block-heading span { color: var(--coral); font-size: 10px; font-weight: 900; letter-spacing: 0.13em; }
 .schedule-block-heading h3 { margin: 0; font-size: 21px; letter-spacing: -0.03em; }
 .schedule-block-heading p { margin: 0; color: #687c72; font-size: 12px; }
+.edit-standby-button, .finish-standby-button {
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px solid #789487;
+  background: white;
+  color: var(--green-dark);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 850;
+}
+.finish-standby-button { background: var(--green); color: white; }
 
 .result-table-wrap { margin-top: 30px; overflow-x: auto; box-shadow: 0 12px 35px rgba(23, 63, 52, 0.09); }
 .result-table { width: 100%; min-width: 900px; border-collapse: collapse; table-layout: fixed; background: white; }
@@ -721,9 +716,8 @@ button { color: inherit; }
 .result-table td { font-weight: 800; }
 .result-table td.empty-assignment { background: #f7f8f6; color: #9ca59f; font-weight: 600; }
 .result-table td.closed-assignment { background: #eef0ec; color: #8a938d; font-size: 10px; font-weight: 650; }
-.lunch-result th, .lunch-result td { background: #e4e8e3 !important; color: #6c746f !important; font-weight: 700; }
-
 .editing-table-wrap { box-shadow: 0 0 0 3px #d6a66f, 0 12px 35px rgba(23, 63, 52, 0.09); }
+.standby-editing-table-wrap { box-shadow: 0 0 0 3px #77a998, 0 12px 35px rgba(23, 63, 52, 0.09); }
 .editing-table td { padding: 3px; }
 .editing-table td select {
   width: 100%;

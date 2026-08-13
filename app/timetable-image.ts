@@ -151,7 +151,7 @@ export async function recognizeTimetableImage(file: File): Promise<RecognitionRe
     { red: 0, green: 0, blue: 0 },
   );
 
-  const blocked = Array.from({ length: 7 }, () => Array(12).fill(false) as boolean[]);
+  const blocked = Array.from({ length: 7 }, () => Array(30).fill(false) as boolean[]);
   let blockedSlots = 0;
   colors.forEach((color) => {
     const distance = Math.hypot(
@@ -160,7 +160,8 @@ export async function recognizeTimetableImage(file: File): Promise<RecognitionRe
       color.blue - background.blue,
     );
     if (distance > 16) {
-      blocked[color.day][color.slot] = true;
+      const expandedSlot = color.slot < 4 ? color.slot + 6 : color.slot + 8;
+      blocked[color.day][expandedSlot] = true;
       blockedSlots += 1;
     }
   });

@@ -7,10 +7,14 @@ import {
   DAYS,
   recalculateScheduleResult,
   TIMES,
+  updateStandbyAssignment,
 } from "../app/scheduler.ts";
 
+const legacyWorkSlots = [6, 7, 8, 9, 12, 13, 14, 15, 16, 17, 18, 19];
 const createWeekdayOperating = () =>
-  DAYS.map((_, day) => TIMES.map(() => day < 5));
+  DAYS.map((_, day) => TIMES.map((__, slot) =>
+    day < 5 && legacyWorkSlots.includes(slot)
+  ));
 
 for (const peopleCount of [5, 6]) {
   test(`${peopleCount}명의 대기시간을 동일하게 배정한다`, () => {
@@ -23,7 +27,7 @@ for (const peopleCount of [5, 6]) {
     assert.equal(spread, 0);
     assert.equal(
       result.standbyHours.reduce((sum, hours) => sum + hours, 0),
-      5 * TIMES.length * 0.5,
+      30,
     );
 
     for (let day = 0; day < DAYS.length; day += 1) {
@@ -62,23 +66,24 @@ test("수동 변경 후 개인별 시간과 대기표를 다시 계산한다", (
   const operating = createWeekdayOperating();
   const original = buildScheduleCandidates(blocked, 1, 1, operating)[0];
   const assignments = original.assignments.map((day) => [...day]);
-  const previousPerson = assignments[0][0]!;
+  const targetSlot = legacyWorkSlots[0];
+  const previousPerson = assignments[0][targetSlot]!;
   const nextPerson = (previousPerson + 1) % 5;
-  assignments[0][0] = nextPerson;
+  assignments[0][targetSlot] = nextPerson;
 
   const recalculated = recalculateScheduleResult(assignments, blocked, 1, operating);
 
   assert.equal(recalculated.hours[previousPerson], original.hours[previousPerson] - 0.5);
   assert.equal(recalculated.hours[nextPerson], original.hours[nextPerson] + 0.5);
   assert.equal(recalculated.hours.reduce((sum, hours) => sum + hours, 0), 30);
-  assert.notEqual(recalculated.standbyAssignments[0][0], nextPerson);
+  assert.notEqual(recalculated.standbyAssignments[0][targetSlot], nextPerson);
 });
 
 test("최소 1일로 설정해도 필요하면 2일 출근으로 확장한다", () => {
   const blocked = createEmptyBlocked(5);
   for (let day = 0; day < DAYS.length; day += 1) {
     for (let slot = 0; slot < TIMES.length; slot += 1) {
-      blocked[0][day][slot] = !(day < 2 && slot < 6);
+      blocked[0][day][slot] = !(day < 2 && legacyWorkSlots.slice(0, 6).includes(slot));
     }
   }
 
@@ -93,7 +98,7 @@ test("최소 2일로 설정해도 근로시간 확보에 필요하면 3일로 �
   const blocked = createEmptyBlocked(6);
   for (let day = 0; day < DAYS.length; day += 1) {
     for (let slot = 0; slot < TIMES.length; slot += 1) {
-      blocked[0][day][slot] = !(day < 3 && slot < 3);
+      blocked[0][day][slot] = !(day < 3 && legacyWorkSlots.slice(0, 3).includes(slot));
     }
   }
 
@@ -152,9 +157,44 @@ test("운영시간을 선택하지 않으면 생성하지 않는다", () => {
 });
 
 test("일요일을 포함해 최소 7일 출근도 설정할 수 있다", () => {
-  const operating = DAYS.map(() => TIMES.map(() => true));
+  const operating = DAYS.map(() => TIMES.map((_, slot) => slot < 3));
   const result = buildScheduleCandidates(createEmptyBlocked(3), 1, 7, operating)[0];
 
   assert.deepEqual(result.attendanceDays, [7, 7, 7]);
   assert.equal(result.workDays.every((days) => days.includes("일")), true);
+});
+
+test("07시부터 22시까지 점심시간을 포함해 선택할 수 있다", () => {
+  assert.equal(TIMES[0], "07:00~07:30");
+  assert.equal(TIMES.at(-1), "21:30~22:00");
+  assert.equal(TIMES.includes("12:00~12:30"), true);
+  assert.equal(TIMES.includes("12:30~13:00"), true);
+});
+
+test("대기시간표 수정 시 가능한 학생만 배정하고 대기시간을 갱신한다", () => {
+  const operating = createEmptyOperatingGrid();
+  operating[0][0] = true;
+  operating[0][1] = true;
+  const blocked = createEmptyBlocked(3);
+  const result = buildScheduleCandidates(blocked, 1, 1, operating)[0];
+  const currentStandby = result.standbyAssignments[0][0]!;
+  const nextStandby = [0, 1, 2].find((person) =>
+    person !== currentStandby && person !== result.assignments[0][0]
+  )!;
+  const updated = updateStandbyAssignment(result, blocked, operating, 0, 0, nextStandby);
+
+  assert.equal(updated.standbyAssignments[0][0], nextStandby);
+  assert.equal(updated.standbyHours[currentStandby], result.standbyHours[currentStandby] - 0.5);
+  assert.equal(updated.standbyHours[nextStandby], result.standbyHours[nextStandby] + 0.5);
+  assert.throws(
+    () => updateStandbyAssignment(
+      result,
+      blocked,
+      operating,
+      0,
+      0,
+      result.assignments[0][0]!,
+    ),
+    /대기 근로자로 배정할 수 없습니다/,
+  );
 });

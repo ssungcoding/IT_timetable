@@ -8,6 +8,7 @@ import {
   DAYS,
   recalculateScheduleResult,
   TIMES,
+  updateStandbyAssignment,
   type BlockedGrid,
   type OperatingGrid,
   type ScheduleResult,
@@ -43,9 +44,9 @@ async function downloadWorkbook(
     ["시간", ...DAYS],
   ];
   const scheduleRows: (string | number)[][] = [];
+  const lastScheduleSheetRow = 1 + TIMES.length;
 
   TIMES.forEach((time, slot) => {
-    if (slot === 4) scheduleRows.push(["12:00~13:00", "점심시간", "", "", "", ""]);
     scheduleRows.push([
       time,
       ...DAYS.map((_, day) => {
@@ -65,7 +66,6 @@ async function downloadWorkbook(
   };
   ws["!merges"] = [
     { s: { r: 0, c: 0 }, e: { r: 0, c: DAYS.length } },
-    { s: { r: 6, c: 1 }, e: { r: 6, c: DAYS.length } },
   ];
   ws["!cols"] = [{ wch: 18 }, ...DAYS.map(() => ({ wch: 16 }))];
   ws["!rows"] = [{ hpt: 32 }, { hpt: 26 }];
@@ -78,7 +78,7 @@ async function downloadWorkbook(
     right: { style: "thin", color: { rgb: "AEB8AE" } },
   };
 
-  for (let row = 0; row <= 14; row += 1) {
+  for (let row = 0; row <= lastScheduleSheetRow; row += 1) {
     for (let col = 0; col <= DAYS.length; col += 1) {
       const address = XLSX.utils.encode_cell({ r: row, c: col });
       const cell = excelCell(ws, address);
@@ -105,42 +105,33 @@ async function downloadWorkbook(
     };
   }
 
-  for (let row = 2; row <= 14; row += 1) {
+  for (let row = 2; row <= lastScheduleSheetRow; row += 1) {
     const timeCell = excelCell(ws, XLSX.utils.encode_cell({ r: row, c: 0 }));
     if (timeCell) timeCell.s = {
       font: { name: "맑은 고딕", sz: 10, bold: true, color: { rgb: "40534D" } },
-      fill: { fgColor: { rgb: row === 6 ? "E8ECE7" : "F5F6F2" } },
+      fill: { fgColor: { rgb: "F5F6F2" } },
       alignment: { horizontal: "center", vertical: "center" },
       border,
     };
     for (let col = 1; col <= DAYS.length; col += 1) {
       const cell = excelCell(ws, XLSX.utils.encode_cell({ r: row, c: col }));
       if (!cell) continue;
-      if (row === 6) {
+      const person = names.indexOf(String(cell.v));
+      if (person === -1) {
         cell.s = {
-          font: { name: "맑은 고딕", sz: 11, bold: true, color: { rgb: "6A716A" } },
-          fill: { fgColor: { rgb: "E8ECE7" } },
+          font: { name: "맑은 고딕", sz: 10, color: { rgb: "7A847E" } },
+          fill: { fgColor: { rgb: "EEF0EC" } },
           alignment: { horizontal: "center", vertical: "center" },
           border,
         };
-      } else {
-        const person = names.indexOf(String(cell.v));
-        if (person === -1) {
-          cell.s = {
-            font: { name: "맑은 고딕", sz: 10, color: { rgb: "7A847E" } },
-            fill: { fgColor: { rgb: "EEF0EC" } },
-            alignment: { horizontal: "center", vertical: "center" },
-            border,
-          };
-          continue;
-        }
-        cell.s = {
-          font: { name: "맑은 고딕", sz: 11, bold: true, color: { rgb: DARK_COLORS[person].slice(1) } },
-          fill: { fgColor: { rgb: COLORS[person].slice(1) } },
-          alignment: { horizontal: "center", vertical: "center" },
-          border,
-        };
+        continue;
       }
+      cell.s = {
+        font: { name: "맑은 고딕", sz: 11, bold: true, color: { rgb: DARK_COLORS[person].slice(1) } },
+        fill: { fgColor: { rgb: COLORS[person].slice(1) } },
+        alignment: { horizontal: "center", vertical: "center" },
+        border,
+      };
     }
   }
 
@@ -149,7 +140,7 @@ async function downloadWorkbook(
   const standbyTitle = excelCell(standby, "A1");
   if (standbyTitle) standbyTitle.v = "대기 시간표";
   TIMES.forEach((_, slot) => {
-    const row = 2 + slot + (slot >= 4 ? 1 : 0);
+    const row = 2 + slot;
     DAYS.forEach((__, day) => {
       const cell = excelCell(standby, XLSX.utils.encode_cell({ r: row, c: day + 1 }));
       if (!cell) return;
@@ -249,11 +240,6 @@ function ScheduleTable({
         <tbody>
           {TIMES.map((time, slot) => (
             <Fragment key={time}>
-              {slot === 4 && (
-                <tr className="lunch-result">
-                  <th>12:00~13:00</th><td colSpan={DAYS.length}>점심시간 · 근로 없음</td>
-                </tr>
-              )}
               <tr>
                 <th>{time}</th>
                 {DAYS.map((day, dayIndex) => {
@@ -302,11 +288,6 @@ function EditableScheduleTable({
         <tbody>
           {TIMES.map((time, slot) => (
             <Fragment key={time}>
-              {slot === 4 && (
-                <tr className="lunch-result">
-                  <th>12:00~13:00</th><td colSpan={DAYS.length}>점심시간 · 근로 없음</td>
-                </tr>
-              )}
               <tr>
                 <th>{time}</th>
                 {DAYS.map((day, dayIndex) => {
@@ -343,6 +324,81 @@ function EditableScheduleTable({
   );
 }
 
+function EditableStandbyTable({
+  assignments,
+  workAssignments,
+  names,
+  operating,
+  blocked,
+  hours,
+  onSelect,
+}: {
+  assignments: (number | null)[][];
+  workAssignments: (number | null)[][];
+  names: string[];
+  operating: OperatingGrid;
+  blocked: BlockedGrid;
+  hours: number[];
+  onSelect: (day: number, slot: number, person: number) => void;
+}) {
+  return (
+    <div className="result-table-wrap editing-table-wrap standby-editing-table-wrap">
+      <table className="result-table editing-table">
+        <thead>
+          <tr><th>시간</th>{DAYS.map((day) => <th key={day}>{day}요일</th>)}</tr>
+        </thead>
+        <tbody>
+          {TIMES.map((time, slot) => (
+            <Fragment key={time}>
+              <tr>
+                <th>{time}</th>
+                {DAYS.map((day, dayIndex) => {
+                  if (!operating[dayIndex][slot]) {
+                    return <td className="closed-assignment" key={day}>운영 안 함</td>;
+                  }
+                  const person = assignments[dayIndex][slot];
+                  const availablePeople = names.map((_, index) => index).filter(
+                    (candidate) =>
+                      candidate !== workAssignments[dayIndex][slot] &&
+                      !blocked[candidate][dayIndex][slot],
+                  );
+                  if (availablePeople.length === 0) {
+                    return <td className="empty-assignment" key={day}>가능한 학생 없음</td>;
+                  }
+                  const displayPerson = person !== null && availablePeople.includes(person)
+                    ? person
+                    : null;
+                  return (
+                    <td
+                      key={day}
+                      style={{ background: displayPerson === null ? undefined : COLORS[displayPerson] }}
+                    >
+                      <select
+                        aria-label={`${day}요일 ${time} 대기 학생 수정`}
+                        value={displayPerson ?? ""}
+                        onChange={(event) =>
+                          onSelect(dayIndex, slot, Number(event.currentTarget.value))
+                        }
+                      >
+                        {displayPerson === null && <option value="" disabled>빈칸 · 학생 선택</option>}
+                        {availablePeople.map((availablePerson) => (
+                          <option value={availablePerson} key={availablePerson}>
+                            {names[availablePerson]} · {hours[availablePerson]}시간
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                  );
+                })}
+              </tr>
+            </Fragment>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function Home() {
   const [peopleCount, setPeopleCount] = useState(5);
   const [minimumAttendanceDays, setMinimumAttendanceDays] = useState(1);
@@ -355,6 +411,7 @@ export default function Home() {
   const [selectedCandidate, setSelectedCandidate] = useState(0);
   const [editedResult, setEditedResult] = useState<ScheduleResult | null>(null);
   const [isFinalEditing, setIsFinalEditing] = useState(false);
+  const [isStandbyEditing, setIsStandbyEditing] = useState(false);
   const [recognitionStatus, setRecognitionStatus] = useState(() => Array(5).fill(""));
   const [batchDragging, setBatchDragging] = useState(false);
   const [batchStatus, setBatchStatus] = useState("");
@@ -378,6 +435,7 @@ export default function Home() {
     setResults([]);
     setEditedResult(null);
     setIsFinalEditing(false);
+    setIsStandbyEditing(false);
   };
 
   const changeCount = (count: number) => {
@@ -431,6 +489,7 @@ export default function Home() {
     setError("");
     setEditedResult(null);
     setIsFinalEditing(false);
+    setIsStandbyEditing(false);
     try {
       const nextResults = buildScheduleCandidates(
         blocked,
@@ -510,6 +569,7 @@ export default function Home() {
   const beginFinalEditing = (candidate: ScheduleResult) => {
     setEditedResult(structuredClone(candidate));
     setIsFinalEditing(true);
+    setIsStandbyEditing(false);
   };
 
   const selectManualAssignment = (day: number, slot: number, person: number) => {
@@ -539,6 +599,27 @@ export default function Home() {
       operating,
     ));
     setIsFinalEditing(false);
+    setIsStandbyEditing(false);
+  };
+
+  const selectManualStandby = (day: number, slot: number, person: number) => {
+    if (!editedResult || !operating[day][slot]) return;
+    if (
+      person === editedResult.assignments[day][slot] ||
+      blocked[person][day][slot]
+    ) {
+      window.alert(`${names[person]} 학생은 이 시간의 대기 근로자로 배정할 수 없습니다.`);
+      return;
+    }
+
+    setEditedResult(updateStandbyAssignment(
+      editedResult,
+      blocked,
+      operating,
+      day,
+      slot,
+      person,
+    ));
   };
 
   const candidateResult = results[selectedCandidate] ?? null;
@@ -561,9 +642,9 @@ export default function Home() {
         </div>
         <div className="operation-card" aria-label="운영 기준">
           <div className="operation-label">운영 시간</div>
-          <strong>10:00 — 17:00</strong>
+          <strong>07:00 — 22:00</strong>
           <div className="operation-divider" />
-          <span>12:00 — 13:00 점심시간</span>
+          <span>30분 단위로 직접 운영시간 선택</span>
         </div>
       </section>
 
@@ -616,12 +697,6 @@ export default function Home() {
               {DAYS.map((day) => <div className="day-header" key={day}>{day}요일</div>)}
               {TIMES.map((time, slot) => (
                 <div className="grid-row" key={time}>
-                  {slot === 4 && (
-                    <>
-                      <div className="lunch-time">12:00~13:00</div>
-                      <div className="lunch-row"><span aria-hidden="true">☕</span> 점심시간 · 근로 없음</div>
-                    </>
-                  )}
                   <div className="time-label">{time}</div>
                   {DAYS.map((day, dayIndex) => {
                     const isOperating = operating[dayIndex][slot];
@@ -828,12 +903,6 @@ export default function Home() {
                     {DAYS.map((day) => <div className="day-header" key={day}>{day}요일</div>)}
                     {TIMES.map((time, slot) => (
                       <div className="grid-row" key={time}>
-                        {slot === 4 && (
-                          <>
-                            <div className="lunch-time">12:00~13:00</div>
-                            <div className="lunch-row"><span aria-hidden="true">☕</span> 점심시간 · 근로 없음</div>
-                          </>
-                        )}
                         <div className="time-label">{time}</div>
                         {DAYS.map((day, dayIndex) => {
                           const isBlocked = blocked[person][dayIndex][slot];
@@ -906,8 +975,8 @@ export default function Home() {
               <button
                 className="download-button"
                 type="button"
-                disabled={isFinalEditing}
-                title={isFinalEditing ? "수정 완료 후 저장할 수 있습니다." : undefined}
+                disabled={isFinalEditing || isStandbyEditing}
+                title={isFinalEditing || isStandbyEditing ? "수정 완료 후 저장할 수 있습니다." : undefined}
                 onClick={() => downloadWorkbook(
                   names,
                   result,
@@ -939,6 +1008,7 @@ export default function Home() {
                       setSelectedCandidate(index);
                       setEditedResult(null);
                       setIsFinalEditing(false);
+                      setIsStandbyEditing(false);
                     }}
                   >
                     <span>{index + 1}</span>안
@@ -1011,8 +1081,24 @@ export default function Home() {
 
               <div className="schedule-block standby-block">
                 <div className="schedule-block-heading">
-                  <div><span>BACKUP</span><h3>대기시간표</h3></div>
-                  <p>{isFinalEditing ? "근로표 수정 완료 후 자동으로 다시 배정됩니다." : <>본 근로자를 제외한 가능한 학생을 공평하게 배정합니다.{result.unfilledStandby > 0 && ` 빈칸 ${result.unfilledStandby}개`}</>}</p>
+                  <div>
+                    <span>BACKUP</span><h3>대기시간표</h3>
+                    {editedResult && !isFinalEditing && (
+                      <button
+                        type="button"
+                        className={isStandbyEditing ? "finish-standby-button" : "edit-standby-button"}
+                        onClick={() => setIsStandbyEditing((current) => !current)}
+                      >
+                        {isStandbyEditing ? "대기표 수정 완료" : "대기표 수정"}
+                      </button>
+                    )}
+                  </div>
+                  <p>{isFinalEditing
+                    ? "근로표 수정 완료 후 자동으로 다시 배정됩니다."
+                    : isStandbyEditing
+                      ? "역삼각형을 눌러 가능한 학생과 현재 대기시간을 확인하세요."
+                      : <>본 근로자를 제외한 가능한 학생을 공평하게 배정합니다.{result.unfilledStandby > 0 && ` 빈칸 ${result.unfilledStandby}개`}</>
+                  }</p>
                 </div>
                 {isFinalEditing ? (
                   <div className="standby-pending-message">
@@ -1020,6 +1106,16 @@ export default function Home() {
                     <strong>근로시간표를 먼저 완성해 주세요.</strong>
                     <p>`수정 완료 · 대기표 재생성`을 누르면 변경된 근로자를 제외하고 대기시간을 공정하게 다시 계산합니다.</p>
                   </div>
+                ) : isStandbyEditing && editedResult ? (
+                  <EditableStandbyTable
+                    assignments={editedResult.standbyAssignments}
+                    workAssignments={editedResult.assignments}
+                    names={names}
+                    operating={operating}
+                    blocked={blocked}
+                    hours={editedResult.standbyHours}
+                    onSelect={selectManualStandby}
+                  />
                 ) : (
                   <ScheduleTable
                     assignments={result.standbyAssignments}
