@@ -1279,6 +1279,17 @@ export default function Home() {
         <div className="footer-info">
           <span>Designed &amp; built by <strong>Sunghyun Kim</strong></span>
           <a href="mailto:atwoddl@naver.com">atwoddl@naver.com</a>
+          <span>
+            코드 기여는{` `}
+            <a
+              href="https://github.com/ssungcoding/sw_timetable"
+              target="_blank"
+              rel="noreferrer"
+            >
+              GitHub 저장소
+            </a>
+            에서 참여할 수 있습니다.
+          </span>
           <span>Created · 2026.08.12</span>
           <span>© 2026 Sunghyun Kim. All rights reserved.</span>
         </div>
