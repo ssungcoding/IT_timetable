@@ -26,6 +26,45 @@ const DARK_COLORS = [
   "#14574D", "#762D40", "#334B83", "#684313", "#24583A",
 ];
 
+type PaintGesture = {
+  kind: "operating" | "blocked";
+  person: number | null;
+  value: boolean;
+  lastDay: number;
+  lastSlot: number;
+};
+
+const cellsBetween = (
+  fromDay: number,
+  fromSlot: number,
+  toDay: number,
+  toSlot: number,
+) => {
+  const cells: { day: number; slot: number }[] = [];
+  let day = fromDay;
+  let slot = fromSlot;
+  const dayDistance = Math.abs(toDay - fromDay);
+  const slotDistance = Math.abs(toSlot - fromSlot);
+  const dayStep = fromDay < toDay ? 1 : -1;
+  const slotStep = fromSlot < toSlot ? 1 : -1;
+  let error = dayDistance - slotDistance;
+
+  while (true) {
+    cells.push({ day, slot });
+    if (day === toDay && slot === toSlot) break;
+    const doubledError = error * 2;
+    if (doubledError > -slotDistance) {
+      error -= slotDistance;
+      day += dayStep;
+    }
+    if (doubledError < dayDistance) {
+      error += dayDistance;
+      slot += slotStep;
+    }
+  }
+  return cells;
+};
+
 const makeNames = (count: number, previous: string[] = []) =>
   Array.from({ length: count }, (_, index) => previous[index] ?? `학생 ${index + 1}`);
 
@@ -408,8 +447,6 @@ export default function Home() {
   const [blocked, setBlocked] = useState<BlockedGrid>(() => createEmptyBlocked(5));
   const [operating, setOperating] = useState<OperatingGrid>(() => createEmptyOperatingGrid());
   const [fixedAssignments, setFixedAssignments] = useState<AssignmentGrid>(() => createEmptyAssignments());
-  const [operatingPaint, setOperatingPaint] = useState<boolean | null>(null);
-  const [paintValue, setPaintValue] = useState<{ person: number; value: boolean } | null>(null);
   const [results, setResults] = useState<ScheduleResult[]>([]);
   const [selectedCandidate, setSelectedCandidate] = useState(0);
   const [editedResult, setEditedResult] = useState<ScheduleResult | null>(null);
@@ -420,15 +457,84 @@ export default function Home() {
   const [batchStatus, setBatchStatus] = useState("");
   const [error, setError] = useState("");
   const resultRef = useRef<HTMLElement>(null);
+  const paintGestureRef = useRef<PaintGesture | null>(null);
 
   useEffect(() => {
     const stopPainting = () => {
-      setPaintValue(null);
-      setOperatingPaint(null);
+      paintGestureRef.current = null;
     };
+    const continuePainting = (event: PointerEvent) => {
+      const gesture = paintGestureRef.current;
+      if (!gesture) return;
+      if (event.pointerType === "mouse" && event.buttons === 0) {
+        stopPainting();
+        return;
+      }
+
+      const hovered = document.elementFromPoint(event.clientX, event.clientY)
+        ?.closest<HTMLElement>("[data-paint-kind]");
+      if (!hovered || hovered.dataset.paintKind !== gesture.kind) return;
+      const day = Number(hovered.dataset.paintDay);
+      const slot = Number(hovered.dataset.paintSlot);
+      const person = hovered.dataset.paintPerson === undefined
+        ? null
+        : Number(hovered.dataset.paintPerson);
+      if (
+        !Number.isInteger(day) ||
+        !Number.isInteger(slot) ||
+        person !== gesture.person ||
+        (day === gesture.lastDay && slot === gesture.lastSlot)
+      ) return;
+
+      const cells = cellsBetween(gesture.lastDay, gesture.lastSlot, day, slot);
+      const cellKeys = new Set(cells.map((cell) => `${cell.day}:${cell.slot}`));
+      if (gesture.kind === "operating") {
+        setOperating((current) => current.map((dayGrid, dayIndex) =>
+          dayGrid.map((cell, slotIndex) =>
+            cellKeys.has(`${dayIndex}:${slotIndex}`) ? gesture.value : cell,
+          ),
+        ));
+        if (!gesture.value) {
+          setFixedAssignments((current) => current.map((dayAssignments, dayIndex) =>
+            dayAssignments.map((fixedPerson, slotIndex) =>
+              cellKeys.has(`${dayIndex}:${slotIndex}`) ? null : fixedPerson,
+            ),
+          ));
+        }
+      } else if (gesture.person !== null) {
+        setBlocked((current) => current.map((personGrid, personIndex) =>
+          personIndex !== gesture.person
+            ? personGrid
+            : personGrid.map((dayGrid, dayIndex) =>
+                dayGrid.map((cell, slotIndex) =>
+                  cellKeys.has(`${dayIndex}:${slotIndex}`) ? gesture.value : cell,
+                ),
+              ),
+        ));
+        if (gesture.value) {
+          setFixedAssignments((current) => current.map((dayAssignments, dayIndex) =>
+            dayAssignments.map((fixedPerson, slotIndex) =>
+              cellKeys.has(`${dayIndex}:${slotIndex}`) && fixedPerson === gesture.person
+                ? null
+                : fixedPerson,
+            ),
+          ));
+        }
+      }
+
+      gesture.lastDay = day;
+      gesture.lastSlot = slot;
+      setResults([]);
+      setEditedResult(null);
+      setIsFinalEditing(false);
+      setIsStandbyEditing(false);
+      setError("");
+    };
+    window.addEventListener("pointermove", continuePainting);
     window.addEventListener("pointerup", stopPainting);
     window.addEventListener("pointercancel", stopPainting);
     return () => {
+      window.removeEventListener("pointermove", continuePainting);
       window.removeEventListener("pointerup", stopPainting);
       window.removeEventListener("pointercancel", stopPainting);
     };
@@ -751,17 +857,21 @@ export default function Home() {
                         type="button"
                         aria-label={`${day}요일 ${time} ${isOperating ? "근로 운영" : "운영 안 함"}`}
                         aria-pressed={isOperating}
+                        data-paint-kind="operating"
+                        data-paint-day={dayIndex}
+                        data-paint-slot={slot}
                         className={`availability-cell operating-cell ${isOperating ? "selected" : ""}`}
                         onPointerDown={(event) => {
                           event.preventDefault();
                           const value = !isOperating;
-                          setOperatingPaint(value);
+                          paintGestureRef.current = {
+                            kind: "operating",
+                            person: null,
+                            value,
+                            lastDay: dayIndex,
+                            lastSlot: slot,
+                          };
                           setOperatingCell(dayIndex, slot, value);
-                        }}
-                        onPointerEnter={() => {
-                          if (operatingPaint !== null && operatingPaint !== isOperating) {
-                            setOperatingCell(dayIndex, slot, operatingPaint);
-                          }
                         }}
                         onKeyDown={(event) => {
                           if (event.key === "Enter" || event.key === " ") {
@@ -957,17 +1067,22 @@ export default function Home() {
                               type="button"
                               aria-label={`${name} ${day}요일 ${time} ${isBlocked ? "수업 있음" : "근로 가능"}`}
                               aria-pressed={isBlocked}
+                              data-paint-kind="blocked"
+                              data-paint-person={person}
+                              data-paint-day={dayIndex}
+                              data-paint-slot={slot}
                               className={`availability-cell ${isBlocked ? "blocked" : ""}`}
                               onPointerDown={(event) => {
                                 event.preventDefault();
                                 const value = !isBlocked;
-                                setPaintValue({ person, value });
+                                paintGestureRef.current = {
+                                  kind: "blocked",
+                                  person,
+                                  value,
+                                  lastDay: dayIndex,
+                                  lastSlot: slot,
+                                };
                                 setCell(person, dayIndex, slot, value);
-                              }}
-                              onPointerEnter={() => {
-                                if (paintValue?.person === person && paintValue.value !== isBlocked) {
-                                  setCell(person, dayIndex, slot, paintValue.value);
-                                }
                               }}
                               onKeyDown={(event) => {
                                 if (event.key === "Enter" || event.key === " ") {
@@ -1274,7 +1389,7 @@ export default function Home() {
       <footer>
         <div className="footer-brand">
           <strong>SW교육원 근로시간표 편성</strong>
-          <span>VERSION 1.1.0</span>
+          <span>VERSION 1.1.1</span>
         </div>
         <div className="footer-info">
           <span>Designed &amp; built by <strong>Sunghyun Kim</strong></span>
