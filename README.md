@@ -4,17 +4,6 @@
 
 GitHub Pages: https://ssungcoding.github.io/sw_timetable/
 
-## 실행
-
-Node.js 22 이상이 설치된 터미널에서 아래 명령을 실행합니다.
-
-```bash
-npm install
-npm run dev
-```
-
-브라우저에서 `http://localhost:3000`을 열면 됩니다.
-
 ## 사용 순서
 
 1. 월요일부터 일요일까지 07:00 ~ 22:00 중 실제 운영할 30분 칸을 먼저 색칠합니다.
