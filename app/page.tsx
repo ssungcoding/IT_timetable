@@ -30,36 +30,27 @@ type PaintGesture = {
   kind: "operating" | "blocked";
   person: number | null;
   value: boolean;
+  startDay: number;
+  startSlot: number;
   lastDay: number;
   lastSlot: number;
 };
 
-const cellsBetween = (
+const cellsInRectangle = (
   fromDay: number,
   fromSlot: number,
   toDay: number,
   toSlot: number,
 ) => {
   const cells: { day: number; slot: number }[] = [];
-  let day = fromDay;
-  let slot = fromSlot;
-  const dayDistance = Math.abs(toDay - fromDay);
-  const slotDistance = Math.abs(toSlot - fromSlot);
-  const dayStep = fromDay < toDay ? 1 : -1;
-  const slotStep = fromSlot < toSlot ? 1 : -1;
-  let error = dayDistance - slotDistance;
+  const firstDay = Math.min(fromDay, toDay);
+  const lastDay = Math.max(fromDay, toDay);
+  const firstSlot = Math.min(fromSlot, toSlot);
+  const lastSlot = Math.max(fromSlot, toSlot);
 
-  while (true) {
-    cells.push({ day, slot });
-    if (day === toDay && slot === toSlot) break;
-    const doubledError = error * 2;
-    if (doubledError > -slotDistance) {
-      error -= slotDistance;
-      day += dayStep;
-    }
-    if (doubledError < dayDistance) {
-      error += dayDistance;
-      slot += slotStep;
+  for (let day = firstDay; day <= lastDay; day += 1) {
+    for (let slot = firstSlot; slot <= lastSlot; slot += 1) {
+      cells.push({ day, slot });
     }
   }
   return cells;
@@ -486,7 +477,7 @@ export default function Home() {
         (day === gesture.lastDay && slot === gesture.lastSlot)
       ) return;
 
-      const cells = cellsBetween(gesture.lastDay, gesture.lastSlot, day, slot);
+      const cells = cellsInRectangle(gesture.startDay, gesture.startSlot, day, slot);
       const cellKeys = new Set(cells.map((cell) => `${cell.day}:${cell.slot}`));
       if (gesture.kind === "operating") {
         setOperating((current) => current.map((dayGrid, dayIndex) =>
@@ -868,6 +859,8 @@ export default function Home() {
                             kind: "operating",
                             person: null,
                             value,
+                            startDay: dayIndex,
+                            startSlot: slot,
                             lastDay: dayIndex,
                             lastSlot: slot,
                           };
@@ -1079,6 +1072,8 @@ export default function Home() {
                                   kind: "blocked",
                                   person,
                                   value,
+                                  startDay: dayIndex,
+                                  startSlot: slot,
                                   lastDay: dayIndex,
                                   lastSlot: slot,
                                 };
