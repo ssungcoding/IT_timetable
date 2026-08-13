@@ -531,6 +531,47 @@ button { color: inherit; }
 .legend-operating { background: var(--green); border-color: var(--green) !important; }
 .legend-closed { background: white; }
 
+.fixed-heading { margin-top: 58px; }
+.optional-label {
+  display: inline-block;
+  margin-left: 7px;
+  padding: 4px 7px;
+  background: #e3ebe6;
+  color: #4f675d;
+  font-size: 10px;
+  font-weight: 800;
+  vertical-align: 3px;
+}
+.fixed-assignment-card { margin-top: 26px; }
+.fixed-mark { background: #d87659; color: white; }
+.fixed-assignment-cell,
+.fixed-closed-cell {
+  min-height: 38px;
+  display: grid;
+  place-items: center;
+  border-right: 1px solid #d4d9d3;
+  border-bottom: 1px solid #d4d9d3;
+}
+.fixed-assignment-cell { background: white; }
+.fixed-assignment-cell select {
+  width: 100%;
+  min-width: 0;
+  height: 37px;
+  padding: 0 24px 0 8px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #4f5f57;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+}
+.fixed-assignment-cell:focus-within { box-shadow: inset 0 0 0 2px #537e6d; }
+.fixed-assignment-cell.selected select { color: #20342c; }
+.fixed-closed-cell { background: #eef0ec; color: #9aa29d; font-size: 10px; font-weight: 700; }
+.fixed-legend { padding-top: 10px; }
+.legend-fixed { background: #d87659; border-color: #d87659 !important; }
+
 .legend {
   min-height: 42px;
   display: flex;

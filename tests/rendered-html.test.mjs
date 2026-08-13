@@ -30,6 +30,9 @@ test("keeps the work schedule features in the client app", async () => {
   assert.match(page, /요일별 근로 운영시간 입력표/);
   assert.match(page, /07:00 — 22:00/);
   assert.match(page, /대기표 수정 완료/);
+  assert.match(page, /사전 고정 배정/);
+  assert.match(page, /자동 배정/);
+  assert.match(page, /fixedAssignments/);
   assert.match(page, /candidate !== workAssignments\[dayIndex\]\[slot\]/);
   assert.match(packageJson, /"build":\s*"vite build"/);
   assert.match(viteConfig, /base:\s*"\/sw_timetable\/"/);

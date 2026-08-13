@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildScheduleCandidates,
+  createEmptyAssignments,
   createEmptyBlocked,
   createEmptyOperatingGrid,
   DAYS,
@@ -59,6 +60,43 @@ test("서로 다른 추천 후보를 20개 생성한다", () => {
 
   assert.equal(results.length, 20);
   assert.equal(signatures.size, 20);
+});
+
+test("사전 고정 배정은 유지하고 나머지 운영 칸만 자동 배정한다", () => {
+  const blocked = createEmptyBlocked(5);
+  const operating = createWeekdayOperating();
+  const fixedAssignments = createEmptyAssignments();
+  fixedAssignments[0][legacyWorkSlots[0]] = 2;
+  fixedAssignments[2][legacyWorkSlots[5]] = 4;
+
+  const results = buildScheduleCandidates(
+    blocked,
+    10,
+    1,
+    operating,
+    fixedAssignments,
+  );
+
+  assert.equal(results.length, 10);
+  results.forEach((result) => {
+    assert.equal(result.assignments[0][legacyWorkSlots[0]], 2);
+    assert.equal(result.assignments[2][legacyWorkSlots[5]], 4);
+    assert.equal(result.assignments.flat().filter((person) => person !== null).length, 60);
+  });
+});
+
+test("수업 중인 학생을 사전 고정하면 생성하지 않는다", () => {
+  const blocked = createEmptyBlocked(5);
+  const operating = createWeekdayOperating();
+  const fixedAssignments = createEmptyAssignments();
+  const slot = legacyWorkSlots[0];
+  blocked[1][0][slot] = true;
+  fixedAssignments[0][slot] = 1;
+
+  assert.throws(
+    () => buildScheduleCandidates(blocked, 1, 1, operating, fixedAssignments),
+    /고정한 학생은 근로할 수 없습니다/,
+  );
 });
 
 test("수동 변경 후 개인별 시간과 대기표를 다시 계산한다", () => {

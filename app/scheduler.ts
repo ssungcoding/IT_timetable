@@ -155,6 +155,12 @@ export function createEmptyOperatingGrid(): OperatingGrid {
   );
 }
 
+export function createEmptyAssignments(): AssignmentGrid {
+  return Array.from({ length: DAYS.length }, () =>
+    Array<number | null>(TIMES.length).fill(null),
+  );
+}
+
 function permutations(values: number[]): number[][] {
   if (values.length <= 1) return [values];
   return values.flatMap((value, index) =>
@@ -549,6 +555,7 @@ export function buildScheduleCandidates(
   candidateCount = 20,
   minimumAttendanceDays = 1,
   operating: OperatingGrid = createEmptyOperatingGrid(),
+  fixedAssignments: AssignmentGrid = createEmptyAssignments(),
   preferExactHours = true,
   maxAttendanceDays?: number | null,
 ): ScheduleResult[] {
@@ -558,9 +565,29 @@ export function buildScheduleCandidates(
     throw new Error("근로를 운영할 시간을 먼저 색칠해 주세요.");
   }
   const target = activeSlotCount / peopleCount;
-  const maxSlots = preferExactHours
+  const baseMaxSlots = preferExactHours
     ? Math.ceil(target)
     : Math.max(12, Math.ceil(target));
+  const fixedCounts = Array(peopleCount).fill(0) as number[];
+  let hasFixedAssignments = false;
+  for (let day = 0; day < DAYS.length; day += 1) {
+    for (let slot = 0; slot < TIMES.length; slot += 1) {
+      const person = fixedAssignments[day]?.[slot] ?? null;
+      if (person === null) continue;
+      hasFixedAssignments = true;
+      if (
+        !Number.isInteger(person) ||
+        person < 0 ||
+        person >= peopleCount ||
+        !operating[day][slot] ||
+        blocked[person][day][slot]
+      ) {
+        throw new Error(`${DAYS[day]}요일 ${TIMES[slot]}에 고정한 학생은 근로할 수 없습니다.`);
+      }
+      fixedCounts[person] += 1;
+    }
+  }
+  const maxSlotsByPerson = fixedCounts.map((count) => Math.max(baseMaxSlots, count));
   const requiredSlots = preferExactHours
     ? Math.floor(target)
     : Math.min(8, Math.floor(target));
@@ -583,7 +610,11 @@ export function buildScheduleCandidates(
 
   blocked.forEach((personGrid, person) => {
     const availableDays = personGrid.filter((dayGrid, day) =>
-      dayGrid.some((cell, slot) => operating[day][slot] && !cell),
+      dayGrid.some((cell, slot) =>
+        operating[day][slot] &&
+        !cell &&
+        (fixedAssignments[day][slot] === null || fixedAssignments[day][slot] === person),
+      ),
     ).length;
     if (availableDays < minimumAttendanceDays) {
       throw new Error(
@@ -602,7 +633,13 @@ export function buildScheduleCandidates(
     for (let person = 0; person < peopleCount; person += 1) {
       futureAvailability[index][person] =
         futureAvailability[index + 1][person] +
-        (operating[day][slot] && !blocked[person][day][slot] ? 1 : 0);
+        (
+          operating[day][slot] &&
+          !blocked[person][day][slot] &&
+          (fixedAssignments[day][slot] === null || fixedAssignments[day][slot] === person)
+            ? 1
+            : 0
+        );
     }
   }
 
@@ -628,10 +665,15 @@ export function buildScheduleCandidates(
       continue;
     }
     const nextBySignature = new Map<string, BeamState>();
+    const fixedPerson = fixedAssignments[day][slot];
 
     for (const state of beam) {
       for (let person = 0; person < peopleCount; person += 1) {
-        if (blocked[person][day][slot] || state.counts[person] >= maxSlots) continue;
+        if (
+          (fixedPerson !== null && person !== fixedPerson) ||
+          blocked[person][day][slot] ||
+          state.counts[person] >= maxSlotsByPerson[person]
+        ) continue;
         const startsNewAttendanceDay = !(state.dayMasks[person] & (1 << day));
         if (
           startsNewAttendanceDay &&
@@ -672,6 +714,7 @@ export function buildScheduleCandidates(
           candidateCount,
           minimumAttendanceDays,
           operating,
+          fixedAssignments,
           preferExactHours,
           null,
         );
@@ -682,6 +725,7 @@ export function buildScheduleCandidates(
           candidateCount,
           minimumAttendanceDays,
           operating,
+          fixedAssignments,
           false,
           null,
         );
@@ -700,7 +744,13 @@ export function buildScheduleCandidates(
 
   const constructiveStates: BeamState[] = [];
   const isFullOperating = operating.every((day) => day.every(Boolean));
-  if (preferExactHours && isFullOperating && Number.isInteger(target) && peopleCount <= 6) {
+  if (
+    !hasFixedAssignments &&
+    preferExactHours &&
+    isFullOperating &&
+    Number.isInteger(target) &&
+    peopleCount <= 6
+  ) {
     const peopleOrders = permutations(Array.from({ length: peopleCount }, (_, person) => person));
     const minimumPeoplePerDay = Math.ceil(TIMES.length / target);
     if (peopleCount * minimumAttendanceDays >= DAYS.length * minimumPeoplePerDay) {

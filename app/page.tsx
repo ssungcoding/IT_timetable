@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import {
   buildScheduleCandidates,
+  createEmptyAssignments,
   createEmptyBlocked,
   createEmptyOperatingGrid,
   DAYS,
@@ -10,6 +11,7 @@ import {
   TIMES,
   updateStandbyAssignment,
   type BlockedGrid,
+  type AssignmentGrid,
   type OperatingGrid,
   type ScheduleResult,
 } from "./scheduler";
@@ -405,6 +407,7 @@ export default function Home() {
   const [names, setNames] = useState(() => makeNames(5));
   const [blocked, setBlocked] = useState<BlockedGrid>(() => createEmptyBlocked(5));
   const [operating, setOperating] = useState<OperatingGrid>(() => createEmptyOperatingGrid());
+  const [fixedAssignments, setFixedAssignments] = useState<AssignmentGrid>(() => createEmptyAssignments());
   const [operatingPaint, setOperatingPaint] = useState<boolean | null>(null);
   const [paintValue, setPaintValue] = useState<{ person: number; value: boolean } | null>(null);
   const [results, setResults] = useState<ScheduleResult[]>([]);
@@ -452,6 +455,9 @@ export default function Home() {
     setRecognitionStatus((current) =>
       Array.from({ length: count }, (_, index) => current[index] ?? ""),
     );
+    setFixedAssignments((current) => current.map((day) =>
+      day.map((person) => person !== null && person >= count ? null : person),
+    ));
     clearGeneratedResults();
     setError("");
   };
@@ -470,6 +476,15 @@ export default function Home() {
             ),
       ),
     );
+    if (value) {
+      setFixedAssignments((current) => current.map((dayAssignments, dayIndex) =>
+        dayIndex !== day
+          ? dayAssignments
+          : dayAssignments.map((person, slotIndex) =>
+              slotIndex === slot && person === targetPerson ? null : person,
+            ),
+      ));
+    }
     clearGeneratedResults();
   };
 
@@ -478,6 +493,29 @@ export default function Home() {
       dayIndex === day
         ? dayGrid.map((cell, slotIndex) => slotIndex === slot ? value : cell)
         : dayGrid,
+    ));
+    if (!value) {
+      setFixedAssignments((current) => current.map((dayAssignments, dayIndex) =>
+        dayIndex === day
+          ? dayAssignments.map((person, slotIndex) => slotIndex === slot ? null : person)
+          : dayAssignments,
+      ));
+    }
+    clearGeneratedResults();
+    setError("");
+  };
+
+  const setFixedAssignment = (day: number, slot: number, person: number | null) => {
+    if (person !== null && blocked[person][day][slot]) {
+      window.alert(`${names[person]} 학생은 ${DAYS[day]}요일 ${TIMES[slot]}에 수업 또는 일정이 있어 고정할 수 없습니다.`);
+      return;
+    }
+    setFixedAssignments((current) => current.map((dayAssignments, dayIndex) =>
+      dayIndex === day
+        ? dayAssignments.map((currentPerson, slotIndex) =>
+            slotIndex === slot ? person : currentPerson,
+          )
+        : dayAssignments,
     ));
     clearGeneratedResults();
     setError("");
@@ -496,6 +534,7 @@ export default function Home() {
         20,
         minimumAttendanceDays,
         operating,
+        fixedAssignments,
       );
       setResults(nextResults);
       setSelectedCandidate(0);
@@ -528,6 +567,11 @@ export default function Home() {
       }
       setBlocked((current) => current.map((personGrid, index) =>
         index === person ? recognized.blocked : personGrid,
+      ));
+      setFixedAssignments((current) => current.map((dayAssignments, day) =>
+        dayAssignments.map((fixedPerson, slot) =>
+          fixedPerson === person && recognized.blocked[day][slot] ? null : fixedPerson,
+        ),
       ));
       clearGeneratedResults();
       setError("");
@@ -683,6 +727,7 @@ export default function Home() {
                 className="clear-button"
                 onClick={() => {
                   setOperating(DAYS.map(() => TIMES.map(() => false)));
+                  setFixedAssignments(createEmptyAssignments());
                   clearGeneratedResults();
                   setError("");
                 }}
@@ -949,10 +994,90 @@ export default function Home() {
           </div>
         </div>
 
+        <div className="section-heading fixed-heading">
+          <span className="step-number">04</span>
+          <div>
+            <h2>먼저 고정할 근로자를 선택하세요 <small className="optional-label">선택사항</small></h2>
+            <p>원하는 시간만 미리 정하면, 나머지 운영시간은 자동으로 공평하게 배정합니다.</p>
+          </div>
+        </div>
+
+        <article className="availability-card fixed-assignment-card">
+          <div className="grid-toolbar">
+            <div className="student-card-title">
+              <span className="fixed-mark" aria-hidden="true">✓</span>
+              <div>
+                <strong>사전 고정 배정</strong>
+                <small>{fixedAssignments.flat().filter((person) => person !== null).length}칸 고정</small>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="clear-button"
+              onClick={() => {
+                setFixedAssignments(createEmptyAssignments());
+                clearGeneratedResults();
+                setError("");
+              }}
+            >
+              고정 전체 해제
+            </button>
+          </div>
+          <div className="table-scroll">
+            <div className="availability-grid fixed-assignment-grid" role="grid" aria-label="생성 전 근로자 고정 배정표">
+              <div className="grid-corner">시간</div>
+              {DAYS.map((day) => <div className="day-header" key={day}>{day}요일</div>)}
+              {TIMES.map((time, slot) => (
+                <div className="grid-row" key={time}>
+                  <div className="time-label">{time}</div>
+                  {DAYS.map((day, dayIndex) => {
+                    const fixedPerson = fixedAssignments[dayIndex][slot];
+                    if (!operating[dayIndex][slot]) {
+                      return <div className="fixed-closed-cell" key={day}>운영 안 함</div>;
+                    }
+                    const availablePeople = names.map((_, person) => person).filter(
+                      (person) => !blocked[person][dayIndex][slot],
+                    );
+                    return (
+                      <div
+                        className={`fixed-assignment-cell ${fixedPerson !== null ? "selected" : ""}`}
+                        key={day}
+                        style={fixedPerson !== null ? { background: COLORS[fixedPerson] } : undefined}
+                      >
+                        <select
+                          aria-label={`${day}요일 ${time} 사전 고정 근로자`}
+                          value={fixedPerson ?? ""}
+                          onChange={(event) => setFixedAssignment(
+                            dayIndex,
+                            slot,
+                            event.target.value === "" ? null : Number(event.target.value),
+                          )}
+                        >
+                          <option value="">자동 배정</option>
+                          {availablePeople.map((person) => (
+                            <option value={person} key={person}>
+                              {names[person].trim() || `학생 ${person + 1}`}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="legend fixed-legend">
+            <span><i className="legend-fixed" /> 고정 배정</span>
+            <span><i className="legend-available" /> 자동 배정</span>
+            <span className="legend-tip">목록에는 해당 시간에 근로 가능한 학생만 표시됩니다.</span>
+          </div>
+        </article>
+
         <div className="generate-row">
           <div>
             <strong>입력을 마쳤나요?</strong>
-            <span>비어 있는 칸은 근로 가능한 시간으로 계산됩니다.</span>
+            <span>고정하지 않은 운영 칸은 자동으로 공평하게 배정됩니다.</span>
           </div>
           <button className="generate-button" type="button" onClick={generate}>
             시간표 자동 생성 <span aria-hidden="true">→</span>
@@ -965,7 +1090,7 @@ export default function Home() {
         <div className="results-inner">
           <div className="results-heading">
             <div className="section-heading">
-              <span className="step-number light">04</span>
+              <span className="step-number light">05</span>
               <div>
                 <h2>추천 시간표 {results.length}개</h2>
                 <p>근로시간 형평성, 출근 요일 형평성 순으로 정렬했습니다.</p>
