@@ -31,8 +31,11 @@ test("keeps the work schedule features in the client app", async () => {
   assert.match(page, /07:00 — 22:00/);
   assert.match(page, /대기표 수정 완료/);
   assert.match(page, /사전 고정 배정/);
+  assert.match(page, /사전 배정 제외/);
+  assert.match(page, /한 시간에 여러 학생을 체크할 수 있습니다/);
   assert.match(page, /자동 배정/);
   assert.match(page, /fixedAssignments/);
+  assert.match(page, /toggleExcludedAssignment/);
   assert.match(page, /https:\/\/github\.com\/ssungcoding\/sw_timetable/);
   assert.match(page, /candidate !== workAssignments\[dayIndex\]\[slot\]/);
   assert.match(packageJson, /"build":\s*"vite build"/);

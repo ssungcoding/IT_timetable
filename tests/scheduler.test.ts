@@ -99,6 +99,53 @@ test("수업 중인 학생을 사전 고정하면 생성하지 않는다", () =>
   );
 });
 
+test("시간별 배정 제외 학생은 근로와 대기 모두에 배정하지 않는다", () => {
+  const blocked = createEmptyBlocked(5);
+  const excluded = createEmptyBlocked(5);
+  const operating = createWeekdayOperating();
+  const slot = legacyWorkSlots[0];
+  excluded[0][0][slot] = true;
+  excluded[1][0][slot] = true;
+
+  const results = buildScheduleCandidates(
+    blocked,
+    5,
+    1,
+    operating,
+    createEmptyAssignments(),
+    excluded,
+  );
+
+  results.forEach((result) => {
+    assert.notEqual(result.assignments[0][slot], 0);
+    assert.notEqual(result.assignments[0][slot], 1);
+    assert.notEqual(result.standbyAssignments[0][slot], 0);
+    assert.notEqual(result.standbyAssignments[0][slot], 1);
+  });
+});
+
+test("한 시간에 모든 학생을 배정 제외하면 생성하지 않는다", () => {
+  const blocked = createEmptyBlocked(3);
+  const excluded = createEmptyBlocked(3);
+  const operating = createEmptyOperatingGrid();
+  operating[0][0] = true;
+  excluded.forEach((person) => {
+    person[0][0] = true;
+  });
+
+  assert.throws(
+    () => buildScheduleCandidates(
+      blocked,
+      1,
+      1,
+      operating,
+      createEmptyAssignments(),
+      excluded,
+    ),
+    /배정 제외로 근로 가능한 학생이 없는 시간/,
+  );
+});
+
 test("수동 변경 후 개인별 시간과 대기표를 다시 계산한다", () => {
   const blocked = createEmptyBlocked(5);
   const operating = createWeekdayOperating();
@@ -232,6 +279,31 @@ test("대기시간표 수정 시 가능한 학생만 배정하고 대기시간�
       0,
       0,
       result.assignments[0][0]!,
+    ),
+    /대기 근로자로 배정할 수 없습니다/,
+  );
+});
+
+test("배정 제외된 학생으로 대기시간표를 수정할 수 없다", () => {
+  const operating = createEmptyOperatingGrid();
+  operating[0][0] = true;
+  const blocked = createEmptyBlocked(3);
+  const excluded = createEmptyBlocked(3);
+  const result = buildScheduleCandidates(blocked, 1, 1, operating)[0];
+  const excludedPerson = [0, 1, 2].find(
+    (person) => person !== result.assignments[0][0],
+  )!;
+  excluded[excludedPerson][0][0] = true;
+
+  assert.throws(
+    () => updateStandbyAssignment(
+      result,
+      blocked,
+      operating,
+      0,
+      0,
+      excludedPerson,
+      excluded,
     ),
     /대기 근로자로 배정할 수 없습니다/,
   );

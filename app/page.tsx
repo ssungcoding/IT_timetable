@@ -301,6 +301,7 @@ function EditableScheduleTable({
   names,
   operating,
   blocked,
+  excluded,
   hours,
   onSelect,
 }: {
@@ -308,6 +309,7 @@ function EditableScheduleTable({
   names: string[];
   operating: OperatingGrid;
   blocked: BlockedGrid;
+  excluded: BlockedGrid;
   hours: number[];
   onSelect: (day: number, slot: number, person: number) => void;
 }) {
@@ -337,7 +339,8 @@ function EditableScheduleTable({
                         }
                       >
                         {names.map((name, availablePerson) =>
-                          blocked[availablePerson][dayIndex][slot] ? null : (
+                          blocked[availablePerson][dayIndex][slot] ||
+                          excluded[availablePerson][dayIndex][slot] ? null : (
                             <option value={availablePerson} key={availablePerson}>
                               {name} · {hours[availablePerson]}시간
                             </option>
@@ -362,6 +365,7 @@ function EditableStandbyTable({
   names,
   operating,
   blocked,
+  excluded,
   hours,
   onSelect,
 }: {
@@ -370,6 +374,7 @@ function EditableStandbyTable({
   names: string[];
   operating: OperatingGrid;
   blocked: BlockedGrid;
+  excluded: BlockedGrid;
   hours: number[];
   onSelect: (day: number, slot: number, person: number) => void;
 }) {
@@ -392,7 +397,8 @@ function EditableStandbyTable({
                   const availablePeople = names.map((_, index) => index).filter(
                     (candidate) =>
                       candidate !== workAssignments[dayIndex][slot] &&
-                      !blocked[candidate][dayIndex][slot],
+                      !blocked[candidate][dayIndex][slot] &&
+                      !excluded[candidate][dayIndex][slot],
                   );
                   if (availablePeople.length === 0) {
                     return <td className="empty-assignment" key={day}>가능한 학생 없음</td>;
@@ -438,6 +444,8 @@ export default function Home() {
   const [blocked, setBlocked] = useState<BlockedGrid>(() => createEmptyBlocked(5));
   const [operating, setOperating] = useState<OperatingGrid>(() => createEmptyOperatingGrid());
   const [fixedAssignments, setFixedAssignments] = useState<AssignmentGrid>(() => createEmptyAssignments());
+  const [excluded, setExcluded] = useState<BlockedGrid>(() => createEmptyBlocked(5));
+  const [assignmentRuleTab, setAssignmentRuleTab] = useState<"fixed" | "excluded">("fixed");
   const [results, setResults] = useState<ScheduleResult[]>([]);
   const [selectedCandidate, setSelectedCandidate] = useState(0);
   const [editedResult, setEditedResult] = useState<ScheduleResult | null>(null);
@@ -491,6 +499,13 @@ export default function Home() {
               cellKeys.has(`${dayIndex}:${slotIndex}`) ? null : fixedPerson,
             ),
           ));
+          setExcluded((current) => current.map((personGrid) =>
+            personGrid.map((dayGrid, dayIndex) =>
+              dayGrid.map((isExcluded, slotIndex) =>
+                cellKeys.has(`${dayIndex}:${slotIndex}`) ? false : isExcluded,
+              ),
+            ),
+          ));
         }
       } else if (gesture.person !== null) {
         setBlocked((current) => current.map((personGrid, personIndex) =>
@@ -509,6 +524,15 @@ export default function Home() {
                 ? null
                 : fixedPerson,
             ),
+          ));
+          setExcluded((current) => current.map((personGrid, personIndex) =>
+            personIndex !== gesture.person
+              ? personGrid
+              : personGrid.map((dayGrid, dayIndex) =>
+                  dayGrid.map((isExcluded, slotIndex) =>
+                    cellKeys.has(`${dayIndex}:${slotIndex}`) ? false : isExcluded,
+                  ),
+                ),
           ));
         }
       }
@@ -549,6 +573,13 @@ export default function Home() {
       }
       return next;
     });
+    setExcluded((current) => {
+      const next = createEmptyBlocked(count);
+      for (let person = 0; person < Math.min(current.length, count); person += 1) {
+        next[person] = current[person].map((day) => [...day]);
+      }
+      return next;
+    });
     setRecognitionStatus((current) =>
       Array.from({ length: count }, (_, index) => current[index] ?? ""),
     );
@@ -581,6 +612,17 @@ export default function Home() {
               slotIndex === slot && person === targetPerson ? null : person,
             ),
       ));
+      setExcluded((current) => current.map((personGrid, person) =>
+        person !== targetPerson
+          ? personGrid
+          : personGrid.map((dayGrid, dayIndex) =>
+              dayIndex !== day
+                ? dayGrid
+                : dayGrid.map((isExcluded, slotIndex) =>
+                    slotIndex === slot ? false : isExcluded,
+                  ),
+            ),
+      ));
     }
     clearGeneratedResults();
   };
@@ -597,14 +639,21 @@ export default function Home() {
           ? dayAssignments.map((person, slotIndex) => slotIndex === slot ? null : person)
           : dayAssignments,
       ));
+      setExcluded((current) => current.map((personGrid) =>
+        personGrid.map((dayGrid, dayIndex) =>
+          dayIndex === day
+            ? dayGrid.map((isExcluded, slotIndex) => slotIndex === slot ? false : isExcluded)
+            : dayGrid,
+        ),
+      ));
     }
     clearGeneratedResults();
     setError("");
   };
 
   const setFixedAssignment = (day: number, slot: number, person: number | null) => {
-    if (person !== null && blocked[person][day][slot]) {
-      window.alert(`${names[person]} 학생은 ${DAYS[day]}요일 ${TIMES[slot]}에 수업 또는 일정이 있어 고정할 수 없습니다.`);
+    if (person !== null && (blocked[person][day][slot] || excluded[person][day][slot])) {
+      window.alert(`${names[person]} 학생은 ${DAYS[day]}요일 ${TIMES[slot]}에 수업·일정 또는 배정 제외로 지정되어 고정할 수 없습니다.`);
       return;
     }
     setFixedAssignments((current) => current.map((dayAssignments, dayIndex) =>
@@ -614,6 +663,33 @@ export default function Home() {
           )
         : dayAssignments,
     ));
+    clearGeneratedResults();
+    setError("");
+  };
+
+  const toggleExcludedAssignment = (day: number, slot: number, person: number) => {
+    if (blocked[person][day][slot]) return;
+    const value = !excluded[person][day][slot];
+    setExcluded((current) => current.map((personGrid, personIndex) =>
+      personIndex !== person
+        ? personGrid
+        : personGrid.map((dayGrid, dayIndex) =>
+            dayIndex !== day
+              ? dayGrid
+              : dayGrid.map((isExcluded, slotIndex) =>
+                  slotIndex === slot ? value : isExcluded,
+                ),
+          ),
+    ));
+    if (value) {
+      setFixedAssignments((current) => current.map((dayAssignments, dayIndex) =>
+        dayIndex !== day
+          ? dayAssignments
+          : dayAssignments.map((fixedPerson, slotIndex) =>
+              slotIndex === slot && fixedPerson === person ? null : fixedPerson,
+            ),
+      ));
+    }
     clearGeneratedResults();
     setError("");
   };
@@ -632,6 +708,7 @@ export default function Home() {
         minimumAttendanceDays,
         operating,
         fixedAssignments,
+        excluded,
       );
       setResults(nextResults);
       setSelectedCandidate(0);
@@ -669,6 +746,15 @@ export default function Home() {
         dayAssignments.map((fixedPerson, slot) =>
           fixedPerson === person && recognized.blocked[day][slot] ? null : fixedPerson,
         ),
+      ));
+      setExcluded((current) => current.map((personGrid, personIndex) =>
+        personIndex !== person
+          ? personGrid
+          : personGrid.map((dayGrid, day) =>
+              dayGrid.map((isExcluded, slot) =>
+                recognized.blocked[day][slot] ? false : isExcluded,
+              ),
+            ),
       ));
       clearGeneratedResults();
       setError("");
@@ -715,8 +801,8 @@ export default function Home() {
 
   const selectManualAssignment = (day: number, slot: number, person: number) => {
     if (!editedResult || !operating[day][slot]) return;
-    if (blocked[person][day][slot]) {
-      window.alert(`${names[person]} 학생은 ${DAYS[day]}요일 ${TIMES[slot]}에 수업 또는 일정이 있어 배정할 수 없습니다.`);
+    if (blocked[person][day][slot] || excluded[person][day][slot]) {
+      window.alert(`${names[person]} 학생은 ${DAYS[day]}요일 ${TIMES[slot]}에 수업·일정 또는 배정 제외로 지정되어 배정할 수 없습니다.`);
       return;
     }
 
@@ -727,6 +813,7 @@ export default function Home() {
       blocked,
       minimumAttendanceDays,
       operating,
+      excluded,
     );
     setEditedResult(nextResult);
   };
@@ -738,6 +825,7 @@ export default function Home() {
       blocked,
       minimumAttendanceDays,
       operating,
+      excluded,
     ));
     setIsFinalEditing(false);
     setIsStandbyEditing(false);
@@ -747,7 +835,8 @@ export default function Home() {
     if (!editedResult || !operating[day][slot]) return;
     if (
       person === editedResult.assignments[day][slot] ||
-      blocked[person][day][slot]
+      blocked[person][day][slot] ||
+      excluded[person][day][slot]
     ) {
       window.alert(`${names[person]} 학생은 이 시간의 대기 근로자로 배정할 수 없습니다.`);
       return;
@@ -760,6 +849,7 @@ export default function Home() {
       day,
       slot,
       person,
+      excluded,
     ));
   };
 
@@ -825,6 +915,7 @@ export default function Home() {
                 onClick={() => {
                   setOperating(DAYS.map(() => TIMES.map(() => false)));
                   setFixedAssignments(createEmptyAssignments());
+                  setExcluded(createEmptyBlocked(peopleCount));
                   clearGeneratedResults();
                   setError("");
                 }}
@@ -1107,34 +1198,71 @@ export default function Home() {
         <div className="section-heading fixed-heading">
           <span className="step-number">04</span>
           <div>
-            <h2>먼저 고정할 근로자를 선택하세요 <small className="optional-label">선택사항</small></h2>
-            <p>원하는 시간만 미리 정하면, 나머지 운영시간은 자동으로 공평하게 배정합니다.</p>
+            <h2>사전 배정 조건을 설정하세요 <small className="optional-label">선택사항</small></h2>
+            <p>근로자를 미리 고정하거나, 특정 시간에 배정하지 않을 학생을 여러 명 선택할 수 있습니다.</p>
           </div>
         </div>
 
         <article className="availability-card fixed-assignment-card">
+          <div className="assignment-rule-tabs" role="tablist" aria-label="사전 배정 조건 선택">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={assignmentRuleTab === "fixed"}
+              className={assignmentRuleTab === "fixed" ? "active" : ""}
+              onClick={() => setAssignmentRuleTab("fixed")}
+            >
+              <strong>고정 배정</strong>
+              <span>시간마다 한 명 지정</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={assignmentRuleTab === "excluded"}
+              className={assignmentRuleTab === "excluded" ? "active" : ""}
+              onClick={() => setAssignmentRuleTab("excluded")}
+            >
+              <strong>배정 제외</strong>
+              <span>시간마다 여러 명 선택</span>
+            </button>
+          </div>
+
           <div className="grid-toolbar">
             <div className="student-card-title">
-              <span className="fixed-mark" aria-hidden="true">✓</span>
+              <span className={assignmentRuleTab === "fixed" ? "fixed-mark" : "excluded-mark"} aria-hidden="true">
+                {assignmentRuleTab === "fixed" ? "✓" : "−"}
+              </span>
               <div>
-                <strong>사전 고정 배정</strong>
-                <small>{fixedAssignments.flat().filter((person) => person !== null).length}칸 고정</small>
+                <strong>{assignmentRuleTab === "fixed" ? "사전 고정 배정" : "사전 배정 제외"}</strong>
+                <small>
+                  {assignmentRuleTab === "fixed"
+                    ? `${fixedAssignments.flat().filter((person) => person !== null).length}칸 고정`
+                    : `${excluded.flat(2).filter(Boolean).length}건 제외`}
+                </small>
               </div>
             </div>
             <button
               type="button"
               className="clear-button"
               onClick={() => {
-                setFixedAssignments(createEmptyAssignments());
+                if (assignmentRuleTab === "fixed") {
+                  setFixedAssignments(createEmptyAssignments());
+                } else {
+                  setExcluded(createEmptyBlocked(peopleCount));
+                }
                 clearGeneratedResults();
                 setError("");
               }}
             >
-              고정 전체 해제
+              {assignmentRuleTab === "fixed" ? "고정 전체 해제" : "제외 전체 해제"}
             </button>
           </div>
           <div className="table-scroll">
-            <div className="availability-grid fixed-assignment-grid" role="grid" aria-label="생성 전 근로자 고정 배정표">
+            <div
+              className={`availability-grid ${assignmentRuleTab === "fixed" ? "fixed-assignment-grid" : "excluded-assignment-grid"}`}
+              role="grid"
+              aria-label={assignmentRuleTab === "fixed" ? "생성 전 근로자 고정 배정표" : "생성 전 근로자 배정 제외표"}
+            >
               <div className="grid-corner">시간</div>
               {DAYS.map((day) => <div className="day-header" key={day}>{day}요일</div>)}
               {TIMES.map((time, slot) => (
@@ -1147,6 +1275,41 @@ export default function Home() {
                     }
                     const availablePeople = names.map((_, person) => person).filter(
                       (person) => !blocked[person][dayIndex][slot],
+                    );
+                    if (assignmentRuleTab === "excluded") {
+                      const excludedPeople = availablePeople.filter(
+                        (person) => excluded[person][dayIndex][slot],
+                      );
+                      return (
+                        <div
+                          className={`excluded-assignment-cell ${excludedPeople.length > 0 ? "selected" : ""}`}
+                          key={day}
+                        >
+                          <details>
+                            <summary>
+                              {excludedPeople.length > 0 ? `${excludedPeople.length}명 제외` : "제외 없음"}
+                            </summary>
+                            <div className="excluded-person-options">
+                              {availablePeople.length === 0 ? (
+                                <span>선택 가능한 학생 없음</span>
+                              ) : availablePeople.map((person) => (
+                                <label key={person}>
+                                  <input
+                                    type="checkbox"
+                                    checked={excluded[person][dayIndex][slot]}
+                                    onChange={() => toggleExcludedAssignment(dayIndex, slot, person)}
+                                  />
+                                  <i style={{ background: COLORS[person] }} />
+                                  <span>{names[person].trim() || `학생 ${person + 1}`}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </details>
+                        </div>
+                      );
+                    }
+                    const fixedAvailablePeople = availablePeople.filter(
+                      (person) => !excluded[person][dayIndex][slot],
                     );
                     return (
                       <div
@@ -1164,7 +1327,7 @@ export default function Home() {
                           )}
                         >
                           <option value="">자동 배정</option>
-                          {availablePeople.map((person) => (
+                          {fixedAvailablePeople.map((person) => (
                             <option value={person} key={person}>
                               {names[person].trim() || `학생 ${person + 1}`}
                             </option>
@@ -1178,16 +1341,26 @@ export default function Home() {
             </div>
           </div>
           <div className="legend fixed-legend">
-            <span><i className="legend-fixed" /> 고정 배정</span>
-            <span><i className="legend-available" /> 자동 배정</span>
-            <span className="legend-tip">목록에는 해당 시간에 근로 가능한 학생만 표시됩니다.</span>
+            {assignmentRuleTab === "fixed" ? (
+              <>
+                <span><i className="legend-fixed" /> 고정 배정</span>
+                <span><i className="legend-available" /> 자동 배정</span>
+                <span className="legend-tip">목록에는 수업과 배정 제외가 없는 학생만 표시됩니다.</span>
+              </>
+            ) : (
+              <>
+                <span><i className="legend-excluded" /> 배정 제외</span>
+                <span><i className="legend-available" /> 배정 가능</span>
+                <span className="legend-tip">한 시간에 여러 학생을 체크할 수 있습니다.</span>
+              </>
+            )}
           </div>
         </article>
 
         <div className="generate-row">
           <div>
             <strong>입력을 마쳤나요?</strong>
-            <span>고정하지 않은 운영 칸은 자동으로 공평하게 배정됩니다.</span>
+            <span>고정 및 제외 조건을 지키면서 나머지 운영 칸을 공평하게 배정합니다.</span>
           </div>
           <button className="generate-button" type="button" onClick={generate}>
             시간표 자동 생성 <span aria-hidden="true">→</span>
@@ -1306,6 +1479,7 @@ export default function Home() {
                     names={names}
                     operating={operating}
                     blocked={blocked}
+                    excluded={excluded}
                     hours={editedResult.hours}
                     onSelect={selectManualAssignment}
                   />
@@ -1348,6 +1522,7 @@ export default function Home() {
                     names={names}
                     operating={operating}
                     blocked={blocked}
+                    excluded={excluded}
                     hours={editedResult.standbyHours}
                     onSelect={selectManualStandby}
                   />

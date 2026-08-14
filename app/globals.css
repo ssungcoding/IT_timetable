@@ -543,9 +543,39 @@ button { color: inherit; }
   vertical-align: 3px;
 }
 .fixed-assignment-card { margin-top: 26px; }
+.assignment-rule-tabs {
+  margin: -20px -22px 20px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-bottom: 1px solid #cbd4cd;
+}
+.assignment-rule-tabs button {
+  min-height: 70px;
+  padding: 14px 20px;
+  border: 0;
+  border-right: 1px solid #cbd4cd;
+  background: #f0f3ef;
+  color: #6b7871;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+}
+.assignment-rule-tabs button:last-child { border-right: 0; }
+.assignment-rule-tabs button.active {
+  background: var(--green-dark);
+  color: white;
+  box-shadow: inset 0 -4px 0 var(--coral);
+}
+.assignment-rule-tabs strong { font-size: 15px; }
+.assignment-rule-tabs span { font-size: 10px; opacity: 0.78; }
 .fixed-mark { background: #d87659; color: white; }
+.excluded-mark { background: #74566f; color: white; }
 .fixed-assignment-cell,
-.fixed-closed-cell {
+.fixed-closed-cell,
+.excluded-assignment-cell {
   min-height: 38px;
   display: grid;
   place-items: center;
@@ -569,8 +599,48 @@ button { color: inherit; }
 .fixed-assignment-cell:focus-within { box-shadow: inset 0 0 0 2px #537e6d; }
 .fixed-assignment-cell.selected select { color: #20342c; }
 .fixed-closed-cell { background: #eef0ec; color: #9aa29d; font-size: 10px; font-weight: 700; }
+.excluded-assignment-cell { align-content: start; background: white; }
+.excluded-assignment-cell details { width: 100%; }
+.excluded-assignment-cell summary {
+  min-height: 37px;
+  padding: 0 7px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #627169;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 800;
+  list-style: none;
+}
+.excluded-assignment-cell summary::-webkit-details-marker { display: none; }
+.excluded-assignment-cell summary::after { content: "▾"; margin-left: 5px; }
+.excluded-assignment-cell.selected summary { background: #eadde7; color: #5c3854; }
+.excluded-assignment-cell details[open] summary { box-shadow: inset 0 0 0 2px #74566f; }
+.excluded-person-options {
+  padding: 7px;
+  border-top: 1px solid #d4d9d3;
+  background: #faf8f9;
+  display: grid;
+  gap: 5px;
+}
+.excluded-person-options label {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto 9px minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+  color: #44544c;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+}
+.excluded-person-options input { margin: 0; accent-color: #74566f; }
+.excluded-person-options i { width: 9px; height: 9px; }
+.excluded-person-options span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fixed-legend { padding-top: 10px; }
 .legend-fixed { background: #d87659; border-color: #d87659 !important; }
+.legend-excluded { background: #74566f; border-color: #74566f !important; }
 
 .legend {
   min-height: 42px;
@@ -872,6 +942,7 @@ footer {
   .student-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .grid-area { padding: 16px 12px; }
   .availability-card { padding: 16px 12px 12px; }
+  .assignment-rule-tabs { margin: -16px -12px 18px; }
   .grid-toolbar { align-items: center; }
   .grid-toolbar { flex-wrap: wrap; }
   .card-actions { width: 100%; justify-content: space-between; }

@@ -285,6 +285,7 @@ function buildFairStandbyAssignments(
   assignments: AssignmentGrid,
   blocked: BlockedGrid,
   operating: OperatingGrid,
+  excluded: BlockedGrid,
 ) {
   const peopleCount = blocked.length;
   const gridSlots = DAYS.length * TIMES.length;
@@ -304,7 +305,11 @@ function buildFairStandbyAssignments(
     if (!operating[day][slot]) continue;
     addCostFlowEdge(graph, source, slotStart + index, 1, 0);
     for (let person = 0; person < peopleCount; person += 1) {
-      if (person !== assignments[day][slot] && !blocked[person][day][slot]) {
+      if (
+        person !== assignments[day][slot] &&
+        !blocked[person][day][slot] &&
+        !excluded[person][day][slot]
+      ) {
         assignmentEdges[index][person] = addCostFlowEdge(
           graph,
           slotStart + index,
@@ -357,6 +362,7 @@ export function recalculateScheduleResult(
   blocked: BlockedGrid,
   minimumAttendanceDays = 1,
   operating: OperatingGrid = createEmptyOperatingGrid(),
+  excluded: BlockedGrid = createEmptyBlocked(blocked.length),
 ): ScheduleResult {
   const peopleCount = blocked.length;
   const counts = Array(peopleCount).fill(0) as number[];
@@ -388,7 +394,7 @@ export function recalculateScheduleResult(
   });
 
   const { standbyAssignments, standbyCounts, unfilledStandby } =
-    buildFairStandbyAssignments(assignments, blocked, operating);
+    buildFairStandbyAssignments(assignments, blocked, operating, excluded);
 
   return {
     assignments,
@@ -409,11 +415,16 @@ export function updateStandbyAssignment(
   day: number,
   slot: number,
   person: number,
+  excluded: BlockedGrid = createEmptyBlocked(blocked.length),
 ): ScheduleResult {
   if (!operating[day]?.[slot]) {
     throw new Error("운영하지 않는 시간에는 대기 근로자를 배정할 수 없습니다.");
   }
-  if (result.assignments[day][slot] === person || blocked[person]?.[day]?.[slot]) {
+  if (
+    result.assignments[day][slot] === person ||
+    blocked[person]?.[day]?.[slot] ||
+    excluded[person]?.[day]?.[slot]
+  ) {
     throw new Error("해당 학생은 이 시간의 대기 근로자로 배정할 수 없습니다.");
   }
 
@@ -556,6 +567,7 @@ export function buildScheduleCandidates(
   minimumAttendanceDays = 1,
   operating: OperatingGrid = createEmptyOperatingGrid(),
   fixedAssignments: AssignmentGrid = createEmptyAssignments(),
+  excluded: BlockedGrid = createEmptyBlocked(blocked.length),
   preferExactHours = true,
   maxAttendanceDays?: number | null,
 ): ScheduleResult[] {
@@ -570,6 +582,9 @@ export function buildScheduleCandidates(
     : Math.max(12, Math.ceil(target));
   const fixedCounts = Array(peopleCount).fill(0) as number[];
   let hasFixedAssignments = false;
+  const hasExclusions = excluded.some((person) =>
+    person.some((day) => day.some(Boolean)),
+  );
   for (let day = 0; day < DAYS.length; day += 1) {
     for (let slot = 0; slot < TIMES.length; slot += 1) {
       const person = fixedAssignments[day]?.[slot] ?? null;
@@ -580,7 +595,8 @@ export function buildScheduleCandidates(
         person < 0 ||
         person >= peopleCount ||
         !operating[day][slot] ||
-        blocked[person][day][slot]
+        blocked[person][day][slot] ||
+        excluded[person][day][slot]
       ) {
         throw new Error(`${DAYS[day]}요일 ${TIMES[slot]}에 고정한 학생은 근로할 수 없습니다.`);
       }
@@ -597,14 +613,16 @@ export function buildScheduleCandidates(
   for (let day = 0; day < DAYS.length; day += 1) {
     for (let slot = 0; slot < TIMES.length; slot += 1) {
       if (!operating[day][slot]) continue;
-      const hasWorker = blocked.some((person) => !person[day][slot]);
+      const hasWorker = blocked.some((person, personIndex) =>
+        !person[day][slot] && !excluded[personIndex][day][slot],
+      );
       if (!hasWorker) uncovered.push(`${DAYS[day]} ${TIMES[slot]}`);
     }
   }
 
   if (uncovered.length > 0) {
     throw new Error(
-      `모두 수업 중인 시간이 있습니다: ${uncovered.slice(0, 4).join(", ")}${uncovered.length > 4 ? ` 외 ${uncovered.length - 4}개` : ""}`,
+      `수업 또는 배정 제외로 근로 가능한 학생이 없는 시간이 있습니다: ${uncovered.slice(0, 4).join(", ")}${uncovered.length > 4 ? ` 외 ${uncovered.length - 4}개` : ""}`,
     );
   }
 
@@ -613,6 +631,7 @@ export function buildScheduleCandidates(
       dayGrid.some((cell, slot) =>
         operating[day][slot] &&
         !cell &&
+        !excluded[person][day][slot] &&
         (fixedAssignments[day][slot] === null || fixedAssignments[day][slot] === person),
       ),
     ).length;
@@ -636,6 +655,7 @@ export function buildScheduleCandidates(
         (
           operating[day][slot] &&
           !blocked[person][day][slot] &&
+          !excluded[person][day][slot] &&
           (fixedAssignments[day][slot] === null || fixedAssignments[day][slot] === person)
             ? 1
             : 0
@@ -672,6 +692,7 @@ export function buildScheduleCandidates(
         if (
           (fixedPerson !== null && person !== fixedPerson) ||
           blocked[person][day][slot] ||
+          excluded[person][day][slot] ||
           state.counts[person] >= maxSlotsByPerson[person]
         ) continue;
         const startsNewAttendanceDay = !(state.dayMasks[person] & (1 << day));
@@ -715,6 +736,7 @@ export function buildScheduleCandidates(
           minimumAttendanceDays,
           operating,
           fixedAssignments,
+          excluded,
           preferExactHours,
           null,
         );
@@ -726,6 +748,7 @@ export function buildScheduleCandidates(
           minimumAttendanceDays,
           operating,
           fixedAssignments,
+          excluded,
           false,
           null,
         );
@@ -746,6 +769,7 @@ export function buildScheduleCandidates(
   const isFullOperating = operating.every((day) => day.every(Boolean));
   if (
     !hasFixedAssignments &&
+    !hasExclusions &&
     preferExactHours &&
     isFullOperating &&
     Number.isInteger(target) &&
@@ -859,6 +883,7 @@ export function buildScheduleCandidates(
       blocked,
       minimumAttendanceDays,
       operating,
+      excluded,
     );
   });
 }
