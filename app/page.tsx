@@ -7,6 +7,7 @@ import {
   createEmptyBlocked,
   createEmptyOperatingGrid,
   DAYS,
+  isLunchSlot,
   recalculateScheduleResult,
   TIMES,
   updateStandbyAssignment,
@@ -82,6 +83,7 @@ async function downloadWorkbook(
     scheduleRows.push([
       time,
       ...DAYS.map((_, day) => {
+        if (isLunchSlot(slot)) return "점심시간";
         if (!operating[day][slot]) return "운영 없음";
         const person = result.assignments[day][slot];
         return person === null ? "" : names[person];
@@ -177,7 +179,7 @@ async function downloadWorkbook(
       const cell = excelCell(standby, XLSX.utils.encode_cell({ r: row, c: day + 1 }));
       if (!cell) return;
       if (!operating[day][slot]) {
-        cell.v = "운영 없음";
+        cell.v = isLunchSlot(slot) ? "점심시간" : "운영 없음";
         cell.s = {
           font: { name: "맑은 고딕", sz: 10, color: { rgb: "7A847E" } },
           fill: { fgColor: { rgb: "EEF0EC" } },
@@ -277,7 +279,7 @@ function ScheduleTable({
                 {DAYS.map((day, dayIndex) => {
                   const person = assignments[dayIndex][slot];
                   if (!operating[dayIndex][slot]) {
-                    return <td className="closed-assignment" key={day}>운영 안 함</td>;
+                    return <td className="closed-assignment" key={day}>{isLunchSlot(slot) ? "점심시간" : "운영 안 함"}</td>;
                   }
                   return person === null ? (
                     <td className="empty-assignment" key={day}>{emptyLabel}</td>
@@ -327,7 +329,7 @@ function EditableScheduleTable({
                 {DAYS.map((day, dayIndex) => {
                   const person = assignments[dayIndex][slot];
                   if (person === null || !operating[dayIndex][slot]) {
-                    return <td className="closed-assignment" key={day}>운영 안 함</td>;
+                    return <td className="closed-assignment" key={day}>{isLunchSlot(slot) ? "점심시간" : "운영 안 함"}</td>;
                   }
                   return (
                     <td key={day} style={{ background: COLORS[person] }}>
@@ -391,7 +393,7 @@ function EditableStandbyTable({
                 <th>{time}</th>
                 {DAYS.map((day, dayIndex) => {
                   if (!operating[dayIndex][slot]) {
-                    return <td className="closed-assignment" key={day}>운영 안 함</td>;
+                    return <td className="closed-assignment" key={day}>{isLunchSlot(slot) ? "점심시간" : "운영 안 함"}</td>;
                   }
                   const person = assignments[dayIndex][slot];
                   const availablePeople = names.map((_, index) => index).filter(
@@ -486,7 +488,11 @@ export default function Home() {
       ) return;
 
       const cells = cellsInRectangle(gesture.startDay, gesture.startSlot, day, slot);
-      const cellKeys = new Set(cells.map((cell) => `${cell.day}:${cell.slot}`));
+      const cellKeys = new Set(
+        cells
+          .filter((cell) => !isLunchSlot(cell.slot))
+          .map((cell) => `${cell.day}:${cell.slot}`),
+      );
       if (gesture.kind === "operating") {
         setOperating((current) => current.map((dayGrid, dayIndex) =>
           dayGrid.map((cell, slotIndex) =>
@@ -591,6 +597,7 @@ export default function Home() {
   };
 
   const setCell = (targetPerson: number, day: number, slot: number, value: boolean) => {
+    if (isLunchSlot(slot)) return;
     setBlocked((current) =>
       current.map((personGrid, person) =>
         person !== targetPerson
@@ -628,6 +635,7 @@ export default function Home() {
   };
 
   const setOperatingCell = (day: number, slot: number, value: boolean) => {
+    if (isLunchSlot(slot)) return;
     setOperating((current) => current.map((dayGrid, dayIndex) =>
       dayIndex === day
         ? dayGrid.map((cell, slotIndex) => slotIndex === slot ? value : cell)
@@ -863,7 +871,7 @@ export default function Home() {
           <span className="brand-mark" aria-hidden="true">W</span>
           <span>근로시간표 만들기</span>
         </a>
-        <span className="topbar-note">월–일 · 30분 단위</span>
+        <span className="topbar-note">월–금 · 30분 단위</span>
       </header>
 
       <section className="hero" id="top">
@@ -873,9 +881,9 @@ export default function Home() {
         </div>
         <div className="operation-card" aria-label="운영 기준">
           <div className="operation-label">운영 시간</div>
-          <strong>07:00 — 22:00</strong>
+          <strong>10:00 — 17:00</strong>
           <div className="operation-divider" />
-          <span>30분 단위로 직접 운영시간 선택</span>
+          <span>12:00—13:00 점심시간 고정</span>
         </div>
       </section>
 
@@ -902,7 +910,7 @@ export default function Home() {
                 type="button"
                 className="clear-button"
                 onClick={() => {
-                  setOperating(DAYS.map(() => TIMES.map(() => true)));
+                  setOperating(DAYS.map(() => TIMES.map((_, slot) => !isLunchSlot(slot))));
                   clearGeneratedResults();
                   setError("");
                 }}
@@ -933,6 +941,9 @@ export default function Home() {
                   <div className="time-label">{time}</div>
                   {DAYS.map((day, dayIndex) => {
                     const isOperating = operating[dayIndex][slot];
+                    if (isLunchSlot(slot)) {
+                      return <div className="availability-cell lunch-cell" key={day}>점심</div>;
+                    }
                     return (
                       <button
                         key={day}
@@ -975,6 +986,7 @@ export default function Home() {
           <div className="legend operating-legend">
             <span><i className="legend-operating" /> 근로 편성</span>
             <span><i className="legend-closed" /> 운영 안 함</span>
+            <span><i className="legend-lunch" /> 점심시간</span>
             <span className="legend-tip">필요한 요일과 시간만 직접 색칠하세요.</span>
           </div>
         </article>
@@ -1007,7 +1019,7 @@ export default function Home() {
             <div className="count-control">
               <span className="field-label">학생별 최소 출근 요일</span>
               <div className="segment-control day-control" role="group" aria-label="학생별 최소 출근 요일 선택">
-                {[1, 2, 3, 4, 5, 6, 7].map((days) => (
+                {Array.from({ length: DAYS.length }, (_, index) => index + 1).map((days) => (
                   <button
                     key={days}
                     className={minimumAttendanceDays === days ? "active" : ""}
@@ -1145,6 +1157,9 @@ export default function Home() {
                         <div className="time-label">{time}</div>
                         {DAYS.map((day, dayIndex) => {
                           const isBlocked = blocked[person][dayIndex][slot];
+                          if (isLunchSlot(slot)) {
+                            return <div className="availability-cell lunch-cell" key={day}>점심</div>;
+                          }
                           return (
                             <button
                               key={day}
@@ -1271,7 +1286,7 @@ export default function Home() {
                   {DAYS.map((day, dayIndex) => {
                     const fixedPerson = fixedAssignments[dayIndex][slot];
                     if (!operating[dayIndex][slot]) {
-                      return <div className="fixed-closed-cell" key={day}>운영 안 함</div>;
+                      return <div className={`fixed-closed-cell ${isLunchSlot(slot) ? "lunch-cell" : ""}`} key={day}>{isLunchSlot(slot) ? "점심시간" : "운영 안 함"}</div>;
                     }
                     const availablePeople = names.map((_, person) => person).filter(
                       (person) => !blocked[person][dayIndex][slot],
@@ -1567,7 +1582,7 @@ export default function Home() {
           <span>
             코드 기여는{` `}
             <a
-              href="https://github.com/ssungcoding/sw_timetable"
+              href="https://github.com/ssungcoding/IT_timetable"
               target="_blank"
               rel="noreferrer"
             >

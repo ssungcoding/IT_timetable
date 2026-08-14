@@ -224,7 +224,7 @@ button { color: inherit; }
 .segment-control button + button { border-left: 1px solid #aebbb3; }
 .segment-control button.active { background: var(--green); color: white; }
 .segment-control.count-range { grid-template-columns: repeat(4, 1fr); }
-.segment-control.day-control { grid-template-columns: repeat(7, 1fr); }
+.segment-control.day-control { grid-template-columns: repeat(5, 1fr); }
 .day-control button { min-width: 0; padding: 0; font-size: 12px; }
 
 .field-help {
@@ -482,7 +482,7 @@ button { color: inherit; }
 }
 
 .table-scroll { overflow-x: auto; }
-.availability-grid { min-width: 900px; user-select: none; display: grid; grid-template-columns: 130px repeat(7, minmax(96px, 1fr)); }
+.availability-grid { min-width: 700px; user-select: none; display: grid; grid-template-columns: 130px repeat(5, minmax(96px, 1fr)); }
 .grid-row { display: contents; }
 
 .grid-corner, .day-header {
@@ -521,6 +521,16 @@ button { color: inherit; }
 .availability-cell:hover { background: #edf5f1; box-shadow: inset 0 0 0 2px #7caa98; }
 .availability-cell.blocked { background: #d87659; color: white; box-shadow: inset 0 0 0 1px #b65338; }
 .availability-cell.blocked span { font-size: 11px; font-weight: 800; }
+.availability-cell.lunch-cell,
+.fixed-closed-cell.lunch-cell {
+  background: repeating-linear-gradient(135deg, #ece6d8 0 7px, #f6f1e7 7px 14px);
+  color: #725f3f;
+  cursor: not-allowed;
+  font-size: 10px;
+  font-weight: 800;
+  box-shadow: none;
+}
+.availability-cell.lunch-cell:hover { background: repeating-linear-gradient(135deg, #ece6d8 0 7px, #f6f1e7 7px 14px); box-shadow: none; }
 
 .operating-card { margin: 26px 0 58px; }
 .operating-mark { background: var(--green); color: white; }
@@ -530,6 +540,7 @@ button { color: inherit; }
 .operating-legend { padding-top: 10px; }
 .legend-operating { background: var(--green); border-color: var(--green) !important; }
 .legend-closed { background: white; }
+.legend-lunch { background: repeating-linear-gradient(135deg, #d9ccb2 0 3px, #f3ead9 3px 6px); }
 
 .fixed-heading { margin-top: 58px; }
 .optional-label {

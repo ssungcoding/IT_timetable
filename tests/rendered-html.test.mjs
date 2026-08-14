@@ -7,8 +7,8 @@ test("builds a static GitHub Pages entry", async () => {
 
   assert.match(html, /<title>근로시간표 만들기<\/title>/i);
   assert.match(html, /<div id="root"><\/div>/i);
-  assert.match(html, /\/sw_timetable\/assets\/[^"']+\.js/i);
-  assert.match(html, /\/sw_timetable\/assets\/[^"']+\.css/i);
+  assert.match(html, /\/IT_timetable\/assets\/[^"']+\.js/i);
+  assert.match(html, /\/IT_timetable\/assets\/[^"']+\.css/i);
   assert.doesNotMatch(html, /localhost|dist\/server|wrangler/i);
 });
 
@@ -28,7 +28,8 @@ test("keeps the work schedule features in the client app", async () => {
   assert.match(page, /minimumAttendanceDays,\s+operating,/);
   assert.match(page, /\[3, 4, 5, 6, 7, 8, 9, 10\]/);
   assert.match(page, /요일별 근로 운영시간 입력표/);
-  assert.match(page, /07:00 — 22:00/);
+  assert.match(page, /10:00 — 17:00/);
+  assert.match(page, /12:00—13:00 점심시간 고정/);
   assert.match(page, /대기표 수정 완료/);
   assert.match(page, /사전 고정 배정/);
   assert.match(page, /사전 배정 제외/);
@@ -36,8 +37,8 @@ test("keeps the work schedule features in the client app", async () => {
   assert.match(page, /자동 배정/);
   assert.match(page, /fixedAssignments/);
   assert.match(page, /toggleExcludedAssignment/);
-  assert.match(page, /https:\/\/github\.com\/ssungcoding\/sw_timetable/);
+  assert.match(page, /https:\/\/github\.com\/ssungcoding\/IT_timetable/);
   assert.match(page, /candidate !== workAssignments\[dayIndex\]\[slot\]/);
   assert.match(packageJson, /"build":\s*"vite build"/);
-  assert.match(viteConfig, /base:\s*"\/sw_timetable\/"/);
+  assert.match(viteConfig, /base:\s*"\/IT_timetable\/"/);
 });

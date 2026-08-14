@@ -1,11 +1,5 @@
-export const DAYS = ["월", "화", "수", "목", "금", "토", "일"] as const;
+export const DAYS = ["월", "화", "수", "목", "금"] as const;
 export const TIMES = [
-  "07:00~07:30",
-  "07:30~08:00",
-  "08:00~08:30",
-  "08:30~09:00",
-  "09:00~09:30",
-  "09:30~10:00",
   "10:00~10:30",
   "10:30~11:00",
   "11:00~11:30",
@@ -20,17 +14,9 @@ export const TIMES = [
   "15:30~16:00",
   "16:00~16:30",
   "16:30~17:00",
-  "17:00~17:30",
-  "17:30~18:00",
-  "18:00~18:30",
-  "18:30~19:00",
-  "19:00~19:30",
-  "19:30~20:00",
-  "20:00~20:30",
-  "20:30~21:00",
-  "21:00~21:30",
-  "21:30~22:00",
 ] as const;
+
+export const isLunchSlot = (slot: number) => slot === 4 || slot === 5;
 
 export type BlockedGrid = boolean[][][];
 export type OperatingGrid = boolean[][];
@@ -364,6 +350,9 @@ export function recalculateScheduleResult(
   operating: OperatingGrid = createEmptyOperatingGrid(),
   excluded: BlockedGrid = createEmptyBlocked(blocked.length),
 ): ScheduleResult {
+  operating = operating.map((day) =>
+    day.map((isOperating, slot) => isOperating && !isLunchSlot(slot)),
+  );
   const peopleCount = blocked.length;
   const counts = Array(peopleCount).fill(0) as number[];
   const dayMasks = Array(peopleCount).fill(0) as number[];
@@ -417,7 +406,7 @@ export function updateStandbyAssignment(
   person: number,
   excluded: BlockedGrid = createEmptyBlocked(blocked.length),
 ): ScheduleResult {
-  if (!operating[day]?.[slot]) {
+  if (!operating[day]?.[slot] || isLunchSlot(slot)) {
     throw new Error("운영하지 않는 시간에는 대기 근로자를 배정할 수 없습니다.");
   }
   if (
@@ -571,6 +560,9 @@ export function buildScheduleCandidates(
   preferExactHours = true,
   maxAttendanceDays?: number | null,
 ): ScheduleResult[] {
+  operating = operating.map((day) =>
+    day.map((isOperating, slot) => isOperating && !isLunchSlot(slot)),
+  );
   const peopleCount = blocked.length;
   const activeSlotCount = operating.flat().filter(Boolean).length;
   if (activeSlotCount === 0) {

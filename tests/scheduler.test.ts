@@ -6,16 +6,15 @@ import {
   createEmptyBlocked,
   createEmptyOperatingGrid,
   DAYS,
+  isLunchSlot,
   recalculateScheduleResult,
   TIMES,
   updateStandbyAssignment,
 } from "../app/scheduler.ts";
 
-const legacyWorkSlots = [6, 7, 8, 9, 12, 13, 14, 15, 16, 17, 18, 19];
+const legacyWorkSlots = [0, 1, 2, 3, 6, 7, 8, 9, 10, 11, 12, 13];
 const createWeekdayOperating = () =>
-  DAYS.map((_, day) => TIMES.map((__, slot) =>
-    day < 5 && legacyWorkSlots.includes(slot)
-  ));
+  DAYS.map(() => TIMES.map((_, slot) => legacyWorkSlots.includes(slot)));
 
 for (const peopleCount of [5, 6]) {
   test(`${peopleCount}명의 대기시간을 동일하게 배정한다`, () => {
@@ -207,8 +206,7 @@ for (const peopleCount of [3, 4, 7, 8, 9, 10]) {
 
     assert.ok(spread <= 0.5);
     assert.equal(result.hours.reduce((sum, hours) => sum + hours, 0), 30);
-    assert.equal(result.assignments[5].every((person) => person === null), true);
-    assert.equal(result.assignments[6].every((person) => person === null), true);
+    assert.equal(result.assignments.length, 5);
   });
 }
 
@@ -216,8 +214,8 @@ test("색칠한 요일과 시간에만 근로 및 대기를 편성한다", () =>
   const operating = createEmptyOperatingGrid();
   operating[0][10] = true;
   operating[0][11] = true;
-  operating[6][0] = true;
-  operating[6][1] = true;
+  operating[4][0] = true;
+  operating[4][1] = true;
   const result = buildScheduleCandidates(createEmptyBlocked(3), 1, 1, operating)[0];
 
   for (let day = 0; day < DAYS.length; day += 1) {
@@ -231,7 +229,7 @@ test("색칠한 요일과 시간에만 근로 및 대기를 편성한다", () =>
     }
   }
   assert.equal(result.hours.reduce((sum, hours) => sum + hours, 0), 2);
-  assert.equal(result.workDays.flat().includes("일"), true);
+  assert.equal(result.workDays.flat().includes("금"), true);
 });
 
 test("운영시간을 선택하지 않으면 생성하지 않는다", () => {
@@ -241,19 +239,29 @@ test("운영시간을 선택하지 않으면 생성하지 않는다", () => {
   );
 });
 
-test("일요일을 포함해 최소 7일 출근도 설정할 수 있다", () => {
+test("월요일부터 금요일까지 최소 5일 출근을 설정할 수 있다", () => {
   const operating = DAYS.map(() => TIMES.map((_, slot) => slot < 3));
-  const result = buildScheduleCandidates(createEmptyBlocked(3), 1, 7, operating)[0];
+  const result = buildScheduleCandidates(createEmptyBlocked(3), 1, 5, operating)[0];
 
-  assert.deepEqual(result.attendanceDays, [7, 7, 7]);
-  assert.equal(result.workDays.every((days) => days.includes("일")), true);
+  assert.deepEqual(result.attendanceDays, [5, 5, 5]);
+  assert.equal(result.workDays.every((days) => days.includes("금")), true);
 });
 
-test("07시부터 22시까지 점심시간을 포함해 선택할 수 있다", () => {
-  assert.equal(TIMES[0], "07:00~07:30");
-  assert.equal(TIMES.at(-1), "21:30~22:00");
-  assert.equal(TIMES.includes("12:00~12:30"), true);
-  assert.equal(TIMES.includes("12:30~13:00"), true);
+test("10시부터 17시까지만 표시하고 12시부터 13시는 잠근다", () => {
+  assert.equal(TIMES[0], "10:00~10:30");
+  assert.equal(TIMES.at(-1), "16:30~17:00");
+  assert.deepEqual(TIMES.map((_, slot) => isLunchSlot(slot)), [
+    false, false, false, false, true, true, false,
+    false, false, false, false, false, false, false,
+  ]);
+
+  const operating = createEmptyOperatingGrid();
+  operating[0][0] = true;
+  operating[0][4] = true;
+  operating[0][5] = true;
+  const result = buildScheduleCandidates(createEmptyBlocked(3), 1, 1, operating)[0];
+  assert.equal(result.assignments[0][4], null);
+  assert.equal(result.assignments[0][5], null);
 });
 
 test("대기시간표 수정 시 가능한 학생만 배정하고 대기시간을 갱신한다", () => {
